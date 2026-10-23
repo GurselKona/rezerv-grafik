@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TCMB rezervleri ve yurt içi yerleşiklerin döviz talebi</title>
+<style>
+.viz-root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb;
+  --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --ring: rgba(11,11,11,0.10);
+  --s-net: #2a78d6; --s-swap: #eb6834; --s-shn: #1baf7a;
+  --s-gercek: #6250d6; --s-tuzel: #eda100; --s-toplam: #52514e; --s-kur: #c2366e;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .viz-root {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19;
+    --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
+    --s-net: #3987e5; --s-swap: #d95926; --s-shn: #199e70;
+    --s-gercek: #9085e9; --s-tuzel: #c98500; --s-toplam: #c3c2b7; --s-kur: #e0608f;
+  }
+}
+:root[data-theme="dark"] .viz-root {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19;
+  --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
+  --s-net: #3987e5; --s-swap: #d95926; --s-shn: #199e70;
+  --s-gercek: #9085e9; --s-tuzel: #c98500; --s-toplam: #c3c2b7; --s-kur: #e0608f;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+.viz-root {
+  background: var(--page); color: var(--ink); min-height: 100vh;
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  padding: 24px clamp(12px, 3vw, 40px) 48px;
+}
+.wrap { max-width: 1120px; margin: 0 auto; }
+h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
+.alt { color: var(--ink-2); margin: 0 0 20px; }
+.filtre { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+.filtre button {
+  font: inherit; color: var(--ink-2); background: var(--surface); cursor: pointer;
+  border: 1px solid var(--ring); border-radius: 8px; padding: 5px 12px;
+}
+.filtre button:hover { color: var(--ink); background: var(--grid); }
+.filtre button[aria-pressed="true"] { color: var(--ink); font-weight: 600; border-color: var(--axis); }
+.kutucuklar { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.kutu, .kart { background: var(--surface); border: 1px solid var(--ring); border-radius: 12px; }
+.kutu { padding: 14px 16px; }
+.kutu .etiket { color: var(--ink-2); font-size: 13px; }
+.kutu .deger { font-size: 28px; font-weight: 600; margin: 2px 0; }
+.kutu .not { color: var(--muted); font-size: 12px; }
+.kart { padding: 16px 16px 8px; margin-bottom: 16px; position: relative; }
+.kart h2 { font-size: 15px; font-weight: 600; margin: 0; }
+.kart .aciklama { color: var(--ink-2); font-size: 13px; margin: 2px 0 8px; }
+.lejant { display: flex; gap: 16px; flex-wrap: wrap; color: var(--ink-2); font-size: 13px; margin-bottom: 4px; }
+.lejant span { display: inline-flex; align-items: center; gap: 6px; }
+.anahtar-cizgi { width: 16px; height: 2px; border-radius: 1px; display: inline-block; }
+.anahtar-kutu { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+svg { display: block; overflow: visible; }
+svg text { font: 12px system-ui, -apple-system, "Segoe UI", sans-serif; font-variant-numeric: tabular-nums; }
+.tt {
+  position: absolute; pointer-events: none; display: none; z-index: 2; min-width: 170px;
+  background: var(--surface); border: 1px solid var(--ring); border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12); padding: 8px 10px; font-size: 13px;
+}
+.tt .baslik { color: var(--ink-2); margin-bottom: 4px; }
+.tt .satir { display: flex; align-items: center; gap: 8px; }
+.tt .satir b { font-variant-numeric: tabular-nums; min-width: 56px; text-align: right; }
+.tt .satir span:last-child { color: var(--ink-2); }
+.tt .uyari { color: var(--muted); font-size: 12px; margin-top: 4px; }
+.odak:focus { outline: none; }
+.odak:focus-visible { outline: 2px solid var(--s-net); outline-offset: 2px; }
+details { background: var(--surface); border: 1px solid var(--ring); border-radius: 12px; padding: 12px 16px; }
+summary { cursor: pointer; font-weight: 600; }
+.tablo-kap { max-height: 480px; overflow: auto; margin-top: 12px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { padding: 4px 8px; text-align: right; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th { position: sticky; top: 0; background: var(--surface); color: var(--ink-2); font-weight: 600; }
+th:first-child, td:first-child { text-align: left; }
+td.tahmini { color: var(--muted); }
+.dipnot { color: var(--muted); font-size: 12px; margin-top: 16px; }
+</style>
+</head>
+<body>
+<div class="viz-root">
+<div class="wrap">
+  <h1>TCMB rezervleri ve yurt içi yerleşiklerin döviz talebi</h1>
+  <p class="alt" id="altbaslik"></p>
+
+  <div class="filtre" role="group" aria-label="Dönem">
+    <button data-ay="6">Son 6 ay</button>
+    <button data-ay="12">Son 1 yıl</button>
+    <button data-ay="24" aria-pressed="true">Son 2 yıl</button>
+    <button data-ay="60">Son 5 yıl</button>
+    <button data-ay="0">Tümü</button>
+  </div>
+
+  <div class="kutucuklar" id="kutucuklar"></div>
+
+  <section class="kart">
+    <h2>Net rezervler, swaplar ve swap hariç net rezervler</h2>
+    <p class="aciklama" id="aciklama-rezerv"></p>
+    <div class="lejant" id="lejant-rezerv"></div>
+    <div id="g-rezerv"></div>
+    <div class="tt"></div>
+  </section>
+
+  <section class="kart">
+    <h2>Kümülatif döviz talebi ve USD/TL kuru</h2>
+    <p class="aciklama">milyar ABD doları · seçili dönemin başından itibaren arındırılmış değişimlerin toplamı · sağ eksen: USD/TL döviz alış kuru</p>
+    <div class="lejant" id="lejant-kumulatif"></div>
+    <div id="g-kumulatif"></div>
+    <div class="tt"></div>
+  </section>
+
+  <section class="kart">
+    <h2>Haftalık döviz talebi: parite etkisinden arındırılmış YP mevduat değişimi</h2>
+    <p class="aciklama">milyon ABD doları · yurt içi yerleşikler, yurt içi şubeler · pozitif: net döviz alımı, negatif: net döviz satışı</p>
+    <div class="lejant" id="lejant-haftalik"></div>
+    <div id="g-haftalik"></div>
+    <div class="tt"></div>
+  </section>
+
+  <details>
+    <summary>Tablo görünümü</summary>
+    <div class="tablo-kap"><table id="tablo"></table></div>
+  </details>
+
+  <p class="dipnot">
+    Kaynak: TCMB Uluslararası Rezervler ve Döviz Likiditesi, EVDS (Merkez Bankası Rezervleri, Stand By bilançosu 2A,
+    Yabancı Para Mevduatta Haftalık Değişim ve Parite Etkisi). Yöntem: Mahfi Eğilmez, "Rezervleri Hesaplama Rehberi" (2025).
+    Swap = II.2 + II.3; haftalık verisi olmayan haftalarda bir önceki ay sonunun aylık IRFCL değeri (tahmini).
+    Oluşturma: 23.10.2026 10:00 · tcmb_rezervler.py / rezerv_grafik.py
+  </p>
+</div>
+</div>
+
+<script>
+"use strict";
+const VERI = [{"t":"2014-01-03","net":46.8,"swap":0,"shn":46.8,"tah":true,"kur":2.1687,"yt":null,"yg":null,"yz":null},{"t":"2014-01-10","net":46.6,"swap":0,"shn":46.6,"tah":true,"kur":2.176,"yt":null,"yg":null,"yz":null},{"t":"2014-01-17","net":43.9,"swap":0,"shn":43.9,"tah":true,"kur":2.2084,"yt":null,"yg":null,"yz":null},{"t":"2014-01-24","net":39.1,"swap":0,"shn":39.1,"tah":true,"kur":2.3142,"yt":null,"yg":null,"yz":null},{"t":"2014-01-31","net":42.3,"swap":0,"shn":42.3,"tah":true,"kur":2.2696,"yt":null,"yg":null,"yz":null},{"t":"2014-02-07","net":40.4,"swap":0,"shn":40.4,"tah":true,"kur":2.2169,"yt":null,"yg":null,"yz":null},{"t":"2014-02-14","net":40.3,"swap":0,"shn":40.3,"tah":true,"kur":2.1845,"yt":null,"yg":null,"yz":null},{"t":"2014-02-21","net":41.4,"swap":0,"shn":41.4,"tah":true,"kur":2.1972,"yt":null,"yg":null,"yz":null},{"t":"2014-02-28","net":41.4,"swap":0,"shn":41.4,"tah":true,"kur":2.2129,"yt":-516.2,"yg":-53.7,"yz":-462.5},{"t":"2014-03-07","net":41.8,"swap":0,"shn":41.8,"tah":true,"kur":2.1873,"yt":688.2,"yg":650.8,"yz":37.3},{"t":"2014-03-14","net":41.4,"swap":0,"shn":41.4,"tah":true,"kur":2.2322,"yt":-251.6,"yg":-563.5,"yz":311.9},{"t":"2014-03-21","net":40.8,"swap":0,"shn":40.8,"tah":true,"kur":2.235,"yt":1813.9,"yg":201,"yz":1612.9},{"t":"2014-03-28","net":40.4,"swap":0,"shn":40.4,"tah":true,"kur":2.1898,"yt":3474.4,"yg":1329.7,"yz":2144.7},{"t":"2014-04-04","net":39.8,"swap":0,"shn":39.8,"tah":true,"kur":2.1354,"yt":-51.1,"yg":1359.3,"yz":-1410.4},{"t":"2014-04-11","net":40.7,"swap":0,"shn":40.7,"tah":true,"kur":2.1177,"yt":663.6,"yg":564.7,"yz":98.9},{"t":"2014-04-18","net":40.5,"swap":0,"shn":40.5,"tah":true,"kur":2.1284,"yt":432.2,"yg":5.2,"yz":427},{"t":"2014-04-25","net":39.8,"swap":0,"shn":39.8,"tah":true,"kur":2.1339,"yt":-209.6,"yg":-140.7,"yz":-68.9},{"t":"2014-05-02","net":39.7,"swap":0,"shn":39.7,"tah":true,"kur":2.1073,"yt":-44.9,"yg":281.2,"yz":-326.1},{"t":"2014-05-09","net":40,"swap":0,"shn":40,"tah":true,"kur":2.0766,"yt":-116.6,"yg":301.3,"yz":-417.9},{"t":"2014-05-16","net":39.5,"swap":0,"shn":39.5,"tah":true,"kur":2.0981,"yt":851.7,"yg":199.7,"yz":652},{"t":"2014-05-23","net":40.4,"swap":0,"shn":40.4,"tah":true,"kur":2.0845,"yt":374.3,"yg":44,"yz":330.3},{"t":"2014-05-30","net":40.6,"swap":0,"shn":40.6,"tah":true,"kur":2.0916,"yt":-865,"yg":267.3,"yz":-1132.3},{"t":"2014-06-06","net":41.3,"swap":0,"shn":41.3,"tah":true,"kur":2.0897,"yt":-489.9,"yg":-257.9,"yz":-232},{"t":"2014-06-13","net":40.6,"swap":0,"shn":40.6,"tah":true,"kur":2.1198,"yt":-1026.6,"yg":-323,"yz":-703.6},{"t":"2014-06-20","net":40.9,"swap":0,"shn":40.9,"tah":true,"kur":2.1373,"yt":-834.7,"yg":-959.5,"yz":124.8},{"t":"2014-06-27","net":42.8,"swap":0,"shn":42.8,"tah":true,"kur":2.1234,"yt":-2442.2,"yg":-964.2,"yz":-1477.9},{"t":"2014-07-04","net":43.1,"swap":0,"shn":43.1,"tah":true,"kur":2.1282,"yt":-3008.7,"yg":-502.3,"yz":-2506.5},{"t":"2014-07-11","net":43.3,"swap":0,"shn":43.3,"tah":true,"kur":2.1221,"yt":666.6,"yg":-116.2,"yz":782.8},{"t":"2014-07-18","net":43,"swap":0,"shn":43,"tah":true,"kur":2.1266,"yt":1642.6,"yg":241.4,"yz":1401.2},{"t":"2014-07-25","net":43.2,"swap":0,"shn":43.2,"tah":true,"kur":2.0919,"yt":3182.6,"yg":1336.5,"yz":1846.2},{"t":"2014-08-01","net":42.7,"swap":0,"shn":42.7,"tah":true,"kur":2.1446,"yt":-116.9,"yg":-199.2,"yz":82.3},{"t":"2014-08-08","net":42.8,"swap":0,"shn":42.8,"tah":true,"kur":2.1683,"yt":-919.1,"yg":-351,"yz":-568.2},{"t":"2014-08-15","net":43,"swap":0,"shn":43,"tah":true,"kur":2.1561,"yt":2289.7,"yg":541.8,"yz":1747.9},{"t":"2014-08-22","net":42.9,"swap":0,"shn":42.9,"tah":true,"kur":2.1767,"yt":499.3,"yg":314.7,"yz":184.6},{"t":"2014-08-29","net":43.2,"swap":0,"shn":43.2,"tah":true,"kur":2.1584,"yt":1004.3,"yg":950,"yz":54.3},{"t":"2014-09-05","net":43.1,"swap":0,"shn":43.1,"tah":true,"kur":2.1635,"yt":979.3,"yg":880.2,"yz":99.1},{"t":"2014-09-12","net":43.2,"swap":0,"shn":43.2,"tah":true,"kur":2.2014,"yt":-1017.4,"yg":-441.4,"yz":-576},{"t":"2014-09-19","net":43,"swap":0,"shn":43,"tah":true,"kur":2.2232,"yt":116.3,"yg":88.2,"yz":28.1},{"t":"2014-09-26","net":43.3,"swap":0,"shn":43.3,"tah":true,"kur":2.2557,"yt":272.4,"yg":85.2,"yz":187.3},{"t":"2014-10-03","net":43.7,"swap":0,"shn":43.7,"tah":true,"kur":2.273,"yt":-612.5,"yg":675.6,"yz":-1288.1},{"t":"2014-10-10","net":43.4,"swap":0,"shn":43.4,"tah":true,"kur":2.2789,"yt":1014.8,"yg":547.1,"yz":467.6},{"t":"2014-10-17","net":43.9,"swap":0,"shn":43.9,"tah":true,"kur":2.2509,"yt":1741.9,"yg":436.6,"yz":1305.2},{"t":"2014-10-24","net":43.4,"swap":0,"shn":43.4,"tah":true,"kur":2.2378,"yt":1665.1,"yg":915.5,"yz":749.6},{"t":"2014-10-31","net":44.1,"swap":0,"shn":44.1,"tah":true,"kur":2.2027,"yt":2639.5,"yg":1486.1,"yz":1153.4},{"t":"2014-11-07","net":42.9,"swap":0,"shn":42.9,"tah":true,"kur":2.2707,"yt":1305.8,"yg":396.3,"yz":909.6},{"t":"2014-11-14","net":43.4,"swap":0,"shn":43.4,"tah":true,"kur":2.2419,"yt":-184.8,"yg":197.8,"yz":-382.6},{"t":"2014-11-21","net":43.5,"swap":0,"shn":43.5,"tah":true,"kur":2.2218,"yt":-738.2,"yg":16.7,"yz":-754.9},{"t":"2014-11-28","net":44.3,"swap":0,"shn":44.3,"tah":true,"kur":2.2102,"yt":-543.1,"yg":-157.8,"yz":-385.3},{"t":"2014-12-05","net":43.9,"swap":0,"shn":43.9,"tah":true,"kur":2.2358,"yt":-1874.5,"yg":-742.5,"yz":-1132},{"t":"2014-12-12","net":43.5,"swap":0,"shn":43.5,"tah":true,"kur":2.2782,"yt":-3925.8,"yg":-1816.7,"yz":-2109.1},{"t":"2014-12-19","net":42.7,"swap":0,"shn":42.7,"tah":true,"kur":2.3221,"yt":-2602.9,"yg":-2286.4,"yz":-316.6},{"t":"2014-12-26","net":42.4,"swap":0,"shn":42.4,"tah":true,"kur":2.3182,"yt":210.4,"yg":279.5,"yz":-69},{"t":"2015-01-02","net":43,"swap":0,"shn":43,"tah":true,"kur":2.3449,"yt":-2103.7,"yg":-32.1,"yz":-2071.6},{"t":"2015-01-09","net":43.1,"swap":0,"shn":43.1,"tah":true,"kur":2.3005,"yt":3239.2,"yg":1695.2,"yz":1544},{"t":"2015-01-16","net":43.6,"swap":0,"shn":43.6,"tah":true,"kur":2.3084,"yt":1627.6,"yg":579.6,"yz":1047.9},{"t":"2015-01-23","net":43.8,"swap":0,"shn":43.8,"tah":true,"kur":2.3337,"yt":-1018.5,"yg":-515.9,"yz":-502.7},{"t":"2015-01-30","net":43.5,"swap":0,"shn":43.5,"tah":true,"kur":2.4176,"yt":-2773.3,"yg":-1663.7,"yz":-1109.6},{"t":"2015-02-06","net":43.7,"swap":0,"shn":43.7,"tah":true,"kur":2.4342,"yt":370,"yg":-718.5,"yz":1088.5},{"t":"2015-02-13","net":43.8,"swap":0,"shn":43.8,"tah":true,"kur":2.4677,"yt":767.2,"yg":533,"yz":234.2},{"t":"2015-02-20","net":42.3,"swap":0,"shn":42.3,"tah":true,"kur":2.4531,"yt":2312.4,"yg":994.3,"yz":1318.1},{"t":"2015-02-27","net":41.6,"swap":0,"shn":41.6,"tah":true,"kur":2.5077,"yt":-704.6,"yg":-4.7,"yz":-699.9},{"t":"2015-03-06","net":41.6,"swap":0,"shn":41.6,"tah":true,"kur":2.598,"yt":302.9,"yg":154.6,"yz":148.2},{"t":"2015-03-13","net":41.1,"swap":0,"shn":41.1,"tah":true,"kur":2.613,"yt":929.8,"yg":478.3,"yz":451.4},{"t":"2015-03-20","net":37.4,"swap":0,"shn":37.4,"tah":true,"kur":2.5938,"yt":2683,"yg":1094.9,"yz":1588.2},{"t":"2015-03-27","net":36.8,"swap":0,"shn":36.8,"tah":true,"kur":2.6107,"yt":-362.8,"yg":140.5,"yz":-503.3},{"t":"2015-04-03","net":36.6,"swap":0,"shn":36.6,"tah":true,"kur":2.5905,"yt":108,"yg":706.8,"yz":-598.8},{"t":"2015-04-10","net":36.3,"swap":0,"shn":36.3,"tah":true,"kur":2.6243,"yt":514.7,"yg":-112.8,"yz":627.5},{"t":"2015-04-17","net":37.6,"swap":0,"shn":37.6,"tah":true,"kur":2.6821,"yt":-934.8,"yg":-620.4,"yz":-314.4},{"t":"2015-04-24","net":36.2,"swap":0,"shn":36.2,"tah":true,"kur":2.722,"yt":393,"yg":150.1,"yz":242.9},{"t":"2015-05-01","net":36.9,"swap":0,"shn":36.9,"tah":true,"kur":2.6559,"yt":2728.6,"yg":1952.2,"yz":776.4},{"t":"2015-05-08","net":36.8,"swap":0,"shn":36.8,"tah":true,"kur":2.686,"yt":1273.1,"yg":464.2,"yz":808.8},{"t":"2015-05-15","net":37,"swap":0,"shn":37,"tah":true,"kur":2.5871,"yt":4135,"yg":2008.6,"yz":2126.3},{"t":"2015-05-22","net":35.5,"swap":0,"shn":35.5,"tah":true,"kur":2.5912,"yt":2266.7,"yg":1303.3,"yz":963.4},{"t":"2015-05-29","net":35.8,"swap":0,"shn":35.8,"tah":true,"kur":2.6587,"yt":414.6,"yg":539.8,"yz":-125.2},{"t":"2015-06-05","net":36,"swap":0,"shn":36,"tah":true,"kur":2.6636,"yt":1233.9,"yg":-100.7,"yz":1334.7},{"t":"2015-06-12","net":36,"swap":0,"shn":36,"tah":true,"kur":2.7134,"yt":1579.5,"yg":1058.4,"yz":521},{"t":"2015-06-19","net":35.1,"swap":0,"shn":35.1,"tah":true,"kur":2.7144,"yt":915.8,"yg":377.9,"yz":537.9},{"t":"2015-06-26","net":34.9,"swap":0,"shn":34.9,"tah":true,"kur":2.6587,"yt":1336.9,"yg":980.3,"yz":356.6},{"t":"2015-07-03","net":35.6,"swap":0,"shn":35.6,"tah":true,"kur":2.6876,"yt":-1810.9,"yg":124.4,"yz":-1935.3},{"t":"2015-07-10","net":35.7,"swap":0,"shn":35.7,"tah":true,"kur":2.6607,"yt":400,"yg":500.8,"yz":-100.9},{"t":"2015-07-17","net":35.1,"swap":0,"shn":35.1,"tah":true,"kur":2.6376,"yt":2105.7,"yg":1038.6,"yz":1067.1},{"t":"2015-07-24","net":34.3,"swap":0,"shn":34.3,"tah":true,"kur":2.7371,"yt":-2079.2,"yg":-1334.2,"yz":-745},{"t":"2015-07-31","net":34.1,"swap":0,"shn":34.1,"tah":true,"kur":2.7839,"yt":-2519,"yg":-888.7,"yz":-1630.3},{"t":"2015-08-07","net":34,"swap":0,"shn":34,"tah":true,"kur":2.779,"yt":1027,"yg":213.5,"yz":813.5},{"t":"2015-08-14","net":33.3,"swap":0,"shn":33.3,"tah":true,"kur":2.8316,"yt":1018,"yg":-829.6,"yz":1847.6},{"t":"2015-08-21","net":34,"swap":0,"shn":34,"tah":true,"kur":2.9156,"yt":-817.2,"yg":-46.1,"yz":-771},{"t":"2015-08-28","net":32.9,"swap":0,"shn":32.9,"tah":true,"kur":2.9146,"yt":-575.1,"yg":-501.8,"yz":-73.4},{"t":"2015-09-04","net":32.9,"swap":0,"shn":32.9,"tah":true,"kur":2.9774,"yt":-1302.4,"yg":-846.5,"yz":-455.9},{"t":"2015-09-11","net":33.1,"swap":0,"shn":33.1,"tah":true,"kur":3.0341,"yt":-8.9,"yg":-282.9,"yz":274},{"t":"2015-09-18","net":32.5,"swap":0,"shn":32.5,"tah":true,"kur":2.9961,"yt":1226.9,"yg":655.4,"yz":571.5},{"t":"2015-09-25","net":32,"swap":0,"shn":32,"tah":true,"kur":3.0069,"yt":249.6,"yg":124.1,"yz":125.5},{"t":"2015-10-02","net":31.6,"swap":0,"shn":31.6,"tah":true,"kur":3.0236,"yt":-794.5,"yg":356.2,"yz":-1150.7},{"t":"2015-10-09","net":32.1,"swap":0,"shn":32.1,"tah":true,"kur":2.896,"yt":2492.3,"yg":1323.9,"yz":1168.4},{"t":"2015-10-16","net":31.5,"swap":0,"shn":31.5,"tah":true,"kur":2.8926,"yt":1152.4,"yg":593.1,"yz":559.3},{"t":"2015-10-23","net":31.1,"swap":0,"shn":31.1,"tah":true,"kur":2.8667,"yt":1294.8,"yg":521.8,"yz":773},{"t":"2015-10-30","net":31.8,"swap":0,"shn":31.8,"tah":true,"kur":2.9149,"yt":296.8,"yg":504.1,"yz":-207.2},{"t":"2015-11-06","net":31.9,"swap":0,"shn":31.9,"tah":true,"kur":2.8724,"yt":-2062.1,"yg":-1190.9,"yz":-871.2},{"t":"2015-11-13","net":31.7,"swap":0,"shn":31.7,"tah":true,"kur":2.8686,"yt":1198.2,"yg":412.7,"yz":785.6},{"t":"2015-11-20","net":31.2,"swap":0,"shn":31.2,"tah":true,"kur":2.8303,"yt":379.1,"yg":373.3,"yz":5.8},{"t":"2015-11-27","net":31.1,"swap":0,"shn":31.1,"tah":true,"kur":2.9195,"yt":-308.1,"yg":-230.6,"yz":-77.5},{"t":"2015-12-04","net":30.5,"swap":0,"shn":30.5,"tah":true,"kur":2.8921,"yt":-816.4,"yg":28.3,"yz":-844.6},{"t":"2015-12-11","net":30.1,"swap":0,"shn":30.1,"tah":true,"kur":2.9456,"yt":-826.4,"yg":-607.8,"yz":-218.6},{"t":"2015-12-18","net":29.8,"swap":0,"shn":29.8,"tah":true,"kur":2.9229,"yt":-388.4,"yg":-270.5,"yz":-117.9},{"t":"2015-12-25","net":29.4,"swap":0,"shn":29.4,"tah":true,"kur":2.9123,"yt":-1389.7,"yg":-651.9,"yz":-737.8},{"t":"2016-01-01","net":28.7,"swap":0,"shn":28.7,"tah":true,"kur":2.9181,"yt":-2421,"yg":-357.5,"yz":-2063.5},{"t":"2016-01-08","net":28.9,"swap":0,"shn":28.9,"tah":true,"kur":2.9876,"yt":-3101.3,"yg":-2314.7,"yz":-786.5},{"t":"2016-01-15","net":28.1,"swap":0,"shn":28.1,"tah":true,"kur":3.0362,"yt":-2293.9,"yg":-1196.4,"yz":-1097.5},{"t":"2016-01-22","net":28.3,"swap":0,"shn":28.3,"tah":true,"kur":3.0107,"yt":197.4,"yg":345.7,"yz":-148.3},{"t":"2016-01-29","net":28.4,"swap":0,"shn":28.4,"tah":true,"kur":2.9609,"yt":1822.5,"yg":941,"yz":881.5},{"t":"2016-02-05","net":28.2,"swap":0,"shn":28.2,"tah":true,"kur":2.9051,"yt":2299.8,"yg":1880.7,"yz":419.2},{"t":"2016-02-12","net":28.1,"swap":0,"shn":28.1,"tah":true,"kur":2.9228,"yt":253.9,"yg":492.8,"yz":-238.9},{"t":"2016-02-19","net":27.3,"swap":0,"shn":27.3,"tah":true,"kur":2.9658,"yt":-360,"yg":73.8,"yz":-433.8},{"t":"2016-02-26","net":27,"swap":0,"shn":27,"tah":true,"kur":2.9293,"yt":1946.2,"yg":766.7,"yz":1179.5},{"t":"2016-03-04","net":26.8,"swap":0,"shn":26.8,"tah":true,"kur":2.9147,"yt":699.5,"yg":1032.9,"yz":-333.4},{"t":"2016-03-11","net":28.3,"swap":0,"shn":28.3,"tah":true,"kur":2.8734,"yt":1719.4,"yg":1189.6,"yz":529.9},{"t":"2016-03-18","net":27.2,"swap":0,"shn":27.2,"tah":true,"kur":2.8554,"yt":3024,"yg":1208.7,"yz":1815.3},{"t":"2016-03-25","net":26.9,"swap":0,"shn":26.9,"tah":true,"kur":2.8705,"yt":797.9,"yg":185.2,"yz":612.7},{"t":"2016-04-01","net":27.4,"swap":0,"shn":27.4,"tah":true,"kur":2.8197,"yt":987.7,"yg":905.1,"yz":82.6},{"t":"2016-04-08","net":27.2,"swap":0,"shn":27.2,"tah":true,"kur":2.8569,"yt":-1459.9,"yg":224.2,"yz":-1684.2},{"t":"2016-04-15","net":27.3,"swap":0,"shn":27.3,"tah":true,"kur":2.8545,"yt":449.8,"yg":467.1,"yz":-17.3},{"t":"2016-04-22","net":26.9,"swap":0,"shn":26.9,"tah":true,"kur":2.8287,"yt":1668.6,"yg":837,"yz":831.5},{"t":"2016-04-29","net":27.7,"swap":0,"shn":27.7,"tah":true,"kur":2.8014,"yt":222,"yg":528.9,"yz":-306.9},{"t":"2016-05-06","net":29.8,"swap":0,"shn":29.8,"tah":true,"kur":2.9197,"yt":-4421.7,"yg":-2810.9,"yz":-1610.9},{"t":"2016-05-13","net":30.2,"swap":0,"shn":30.2,"tah":true,"kur":2.9587,"yt":-2281.8,"yg":-1164.3,"yz":-1117.5},{"t":"2016-05-20","net":30,"swap":0,"shn":30,"tah":true,"kur":2.9768,"yt":-1113.1,"yg":-1128.1,"yz":15.1},{"t":"2016-05-27","net":30.2,"swap":0,"shn":30.2,"tah":true,"kur":2.9399,"yt":836.3,"yg":-268.6,"yz":1104.8},{"t":"2016-06-03","net":30.7,"swap":0,"shn":30.7,"tah":true,"kur":2.9462,"yt":-35.7,"yg":366.4,"yz":-402.1},{"t":"2016-06-10","net":31.9,"swap":0,"shn":31.9,"tah":true,"kur":2.91,"yt":1560.1,"yg":580.4,"yz":979.6},{"t":"2016-06-17","net":31.7,"swap":0,"shn":31.7,"tah":true,"kur":2.93,"yt":-508.8,"yg":-737.3,"yz":228.4},{"t":"2016-06-24","net":31.2,"swap":0,"shn":31.2,"tah":true,"kur":2.9266,"yt":1772,"yg":334.8,"yz":1437.1},{"t":"2016-07-01","net":33.7,"swap":0,"shn":33.7,"tah":true,"kur":2.8846,"yt":-2484.7,"yg":401.3,"yz":-2885.9},{"t":"2016-07-08","net":33.2,"swap":0,"shn":33.2,"tah":true,"kur":2.9214,"yt":401.5,"yg":-70.6,"yz":472},{"t":"2016-07-15","net":33.9,"swap":0,"shn":33.9,"tah":true,"kur":2.8834,"yt":118.9,"yg":775.5,"yz":-656.6},{"t":"2016-07-22","net":33.9,"swap":0,"shn":33.9,"tah":true,"kur":3.0573,"yt":-8326.7,"yg":-6738.5,"yz":-1588.2},{"t":"2016-07-29","net":34,"swap":0,"shn":34,"tah":true,"kur":3.0125,"yt":-1905.6,"yg":-1052.1,"yz":-853.5},{"t":"2016-08-05","net":34.2,"swap":0,"shn":34.2,"tah":true,"kur":2.9996,"yt":-379.3,"yg":-291.5,"yz":-87.8},{"t":"2016-08-12","net":34.2,"swap":0,"shn":34.2,"tah":true,"kur":2.9558,"yt":1658.7,"yg":785.2,"yz":873.5},{"t":"2016-08-19","net":34.1,"swap":0,"shn":34.1,"tah":true,"kur":2.9355,"yt":1153.5,"yg":492.6,"yz":660.8},{"t":"2016-08-26","net":34.3,"swap":0,"shn":34.3,"tah":true,"kur":2.9337,"yt":617.9,"yg":258,"yz":359.9},{"t":"2016-09-02","net":34.4,"swap":0,"shn":34.4,"tah":true,"kur":2.9586,"yt":-484.1,"yg":-191.9,"yz":-292.3},{"t":"2016-09-09","net":34.7,"swap":0,"shn":34.7,"tah":true,"kur":2.9552,"yt":-148.9,"yg":-20.3,"yz":-128.6},{"t":"2016-09-16","net":34.6,"swap":0,"shn":34.6,"tah":true,"kur":2.9678,"yt":814.3,"yg":-121,"yz":935.3},{"t":"2016-09-23","net":34.7,"swap":0,"shn":34.7,"tah":true,"kur":2.9474,"yt":-1192.3,"yg":-428.3,"yz":-764},{"t":"2016-09-30","net":32.7,"swap":0,"shn":32.7,"tah":true,"kur":3.0004,"yt":-3469.3,"yg":-1567.3,"yz":-1902},{"t":"2016-10-07","net":32.8,"swap":0,"shn":32.8,"tah":true,"kur":3.0505,"yt":-1214.4,"yg":-459.5,"yz":-754.9},{"t":"2016-10-14","net":32.9,"swap":0,"shn":32.9,"tah":true,"kur":3.0866,"yt":-104.7,"yg":-378.7,"yz":274},{"t":"2016-10-21","net":34,"swap":0,"shn":34,"tah":true,"kur":3.0736,"yt":991.9,"yg":590.2,"yz":401.6},{"t":"2016-10-28","net":35.2,"swap":0,"shn":35.2,"tah":true,"kur":3.0998,"yt":-622.5,"yg":-146.1,"yz":-476.4},{"t":"2016-11-04","net":35,"swap":0,"shn":35,"tah":true,"kur":3.1348,"yt":-216.3,"yg":-190.1,"yz":-26.3},{"t":"2016-11-11","net":35,"swap":0,"shn":35,"tah":true,"kur":3.2588,"yt":-1251.8,"yg":-889.5,"yz":-362.3},{"t":"2016-11-18","net":34.6,"swap":0,"shn":34.6,"tah":true,"kur":3.3835,"yt":1964.5,"yg":848.8,"yz":1115.7},{"t":"2016-11-25","net":35.3,"swap":0,"shn":35.3,"tah":true,"kur":3.4403,"yt":1189.8,"yg":447.1,"yz":742.8},{"t":"2016-12-02","net":35,"swap":-0.3,"shn":34.7,"tah":true,"kur":3.5067,"yt":553.4,"yg":89.7,"yz":463.7},{"t":"2016-12-09","net":34.8,"swap":-0.3,"shn":34.5,"tah":true,"kur":3.4524,"yt":-290.4,"yg":-50.5,"yz":-239.9},{"t":"2016-12-16","net":36.3,"swap":-0.3,"shn":36,"tah":true,"kur":3.494,"yt":940.5,"yg":395,"yz":545.6},{"t":"2016-12-23","net":35.5,"swap":-0.3,"shn":35.2,"tah":true,"kur":3.5077,"yt":285.2,"yg":34.2,"yz":251},{"t":"2016-12-30","net":35.5,"swap":-0.3,"shn":35.2,"tah":true,"kur":3.5192,"yt":402.6,"yg":315.6,"yz":87.1},{"t":"2017-01-06","net":36.5,"swap":-0.3,"shn":36.2,"tah":true,"kur":3.6134,"yt":-4032.6,"yg":-2384.5,"yz":-1648.1},{"t":"2017-01-13","net":37.3,"swap":-0.3,"shn":37,"tah":true,"kur":3.7994,"yt":-76.1,"yg":-597.7,"yz":521.6},{"t":"2017-01-20","net":35.5,"swap":-0.3,"shn":35.2,"tah":true,"kur":3.8176,"yt":70.2,"yg":-272.4,"yz":342.6},{"t":"2017-01-27","net":36.3,"swap":-0.3,"shn":36,"tah":true,"kur":3.8779,"yt":689.1,"yg":63.4,"yz":625.7},{"t":"2017-02-03","net":36.1,"swap":2.8,"shn":38.9,"tah":true,"kur":3.7421,"yt":2126.1,"yg":1889.7,"yz":236.3},{"t":"2017-02-10","net":36.4,"swap":2.8,"shn":39.2,"tah":true,"kur":3.6749,"yt":1994.8,"yg":933.3,"yz":1061.5},{"t":"2017-02-17","net":33,"swap":2.8,"shn":35.8,"tah":true,"kur":3.6662,"yt":1614.1,"yg":1018.7,"yz":595.4},{"t":"2017-02-24","net":34.2,"swap":2.8,"shn":37,"tah":true,"kur":3.5689,"yt":663.4,"yg":451.5,"yz":211.9},{"t":"2017-03-03","net":32.4,"swap":2.6,"shn":35,"tah":true,"kur":3.7215,"yt":-1291,"yg":106.6,"yz":-1397.5},{"t":"2017-03-10","net":34,"swap":2.6,"shn":36.6,"tah":true,"kur":3.7464,"yt":-131.2,"yg":-165.9,"yz":34.7},{"t":"2017-03-17","net":33.6,"swap":2.6,"shn":36.2,"tah":true,"kur":3.6058,"yt":2973.1,"yg":1236,"yz":1737.1},{"t":"2017-03-24","net":31.3,"swap":2.6,"shn":33.9,"tah":true,"kur":3.6185,"yt":1049.8,"yg":801.4,"yz":248.3},{"t":"2017-03-31","net":30.4,"swap":2.6,"shn":33,"tah":true,"kur":3.6362,"yt":846.9,"yg":376.2,"yz":470.7},{"t":"2017-04-07","net":30.1,"swap":3.5,"shn":33.6,"tah":true,"kur":3.7208,"yt":-692.4,"yg":-776.1,"yz":83.7},{"t":"2017-04-14","net":29.6,"swap":3.5,"shn":33.2,"tah":true,"kur":3.6801,"yt":2678.5,"yg":41.5,"yz":2636.9},{"t":"2017-04-21","net":27.8,"swap":3.5,"shn":31.3,"tah":true,"kur":3.6392,"yt":750.9,"yg":888.3,"yz":-137.4},{"t":"2017-04-28","net":28,"swap":3.5,"shn":31.6,"tah":true,"kur":3.5504,"yt":3710.2,"yg":2868.6,"yz":841.5},{"t":"2017-05-05","net":29,"swap":4.9,"shn":33.9,"tah":true,"kur":3.5596,"yt":480.1,"yg":921.5,"yz":-441.5},{"t":"2017-05-12","net":29.3,"swap":4.9,"shn":34.3,"tah":true,"kur":3.5861,"yt":164.5,"yg":22.3,"yz":142.1},{"t":"2017-05-19","net":28.4,"swap":4.9,"shn":33.3,"tah":true,"kur":3.6128,"yt":-1293.6,"yg":-593.2,"yz":-700.4},{"t":"2017-05-26","net":28.6,"swap":4.9,"shn":33.5,"tah":true,"kur":3.5651,"yt":999.1,"yg":359.9,"yz":639.2},{"t":"2017-06-02","net":29.2,"swap":5.4,"shn":34.5,"tah":true,"kur":3.528,"yt":2267.7,"yg":1580,"yz":687.6},{"t":"2017-06-09","net":29.1,"swap":5.4,"shn":34.5,"tah":true,"kur":3.5217,"yt":560.6,"yg":288.3,"yz":272.3},{"t":"2017-06-16","net":30.9,"swap":5.4,"shn":36.3,"tah":true,"kur":3.5124,"yt":-7.6,"yg":1055,"yz":-1062.7},{"t":"2017-06-23","net":30.1,"swap":5.4,"shn":35.4,"tah":true,"kur":3.5,"yt":22.7,"yg":536,"yz":-513.3},{"t":"2017-06-30","net":29.9,"swap":5.4,"shn":35.3,"tah":true,"kur":3.5168,"yt":-1831.2,"yg":-39.6,"yz":-1791.6},{"t":"2017-07-07","net":30.1,"swap":5.7,"shn":35.8,"tah":true,"kur":3.63,"yt":-2771.9,"yg":-1527,"yz":-1244.9},{"t":"2017-07-14","net":28,"swap":5.7,"shn":33.6,"tah":true,"kur":3.5607,"yt":-48.8,"yg":-645.4,"yz":596.6},{"t":"2017-07-21","net":28,"swap":5.7,"shn":33.6,"tah":true,"kur":3.5296,"yt":50.7,"yg":-299.6,"yz":350.3},{"t":"2017-07-28","net":28.7,"swap":5.7,"shn":34.3,"tah":true,"kur":3.5292,"yt":-1120.1,"yg":-677.5,"yz":-442.6},{"t":"2017-08-04","net":29.1,"swap":4.7,"shn":33.8,"tah":true,"kur":3.5287,"yt":-889.7,"yg":-568.2,"yz":-321.5},{"t":"2017-08-11","net":28.8,"swap":4.7,"shn":33.5,"tah":true,"kur":3.5435,"yt":437.7,"yg":-609.8,"yz":1047.5},{"t":"2017-08-18","net":28.6,"swap":4.7,"shn":33.3,"tah":true,"kur":3.5213,"yt":971.6,"yg":-401.7,"yz":1373.3},{"t":"2017-08-25","net":30.9,"swap":4.7,"shn":35.6,"tah":true,"kur":3.4782,"yt":2751.4,"yg":1075.1,"yz":1676.3},{"t":"2017-09-01","net":31.5,"swap":3.1,"shn":34.5,"tah":true,"kur":3.441,"yt":617.2,"yg":872.5,"yz":-255.3},{"t":"2017-09-08","net":31.7,"swap":3.1,"shn":34.7,"tah":true,"kur":3.4061,"yt":355.2,"yg":449,"yz":-93.9},{"t":"2017-09-15","net":31.9,"swap":3.1,"shn":35,"tah":true,"kur":3.4322,"yt":707.4,"yg":312.3,"yz":395.1},{"t":"2017-09-22","net":31.6,"swap":3.1,"shn":34.6,"tah":true,"kur":3.4862,"yt":-236.6,"yg":-415.4,"yz":178.7},{"t":"2017-09-29","net":33,"swap":3.1,"shn":36.1,"tah":true,"kur":3.5521,"yt":-1365.8,"yg":-907.3,"yz":-458.4},{"t":"2017-10-06","net":33.6,"swap":4,"shn":37.6,"tah":true,"kur":3.6041,"yt":-1771.6,"yg":-1014.6,"yz":-757},{"t":"2017-10-13","net":34.2,"swap":4,"shn":38.2,"tah":true,"kur":3.6479,"yt":-1392.6,"yg":-2050.2,"yz":657.6},{"t":"2017-10-20","net":31.9,"swap":4,"shn":35.9,"tah":true,"kur":3.6595,"yt":-407.1,"yg":-400.5,"yz":-6.6},{"t":"2017-10-27","net":33.6,"swap":4,"shn":37.6,"tah":true,"kur":3.8174,"yt":-1377.4,"yg":-2160.8,"yz":783.4},{"t":"2017-11-03","net":35.1,"swap":2.3,"shn":37.4,"tah":true,"kur":3.8204,"yt":-2036.4,"yg":-1383.8,"yz":-652.6},{"t":"2017-11-10","net":36.1,"swap":2.3,"shn":38.4,"tah":true,"kur":3.8644,"yt":154.6,"yg":-247.4,"yz":402},{"t":"2017-11-17","net":34.2,"swap":2.3,"shn":36.5,"tah":true,"kur":3.8792,"yt":800.7,"yg":99.7,"yz":701},{"t":"2017-11-24","net":35.7,"swap":2.3,"shn":38,"tah":true,"kur":3.9365,"yt":1029.5,"yg":65.3,"yz":964.2},{"t":"2017-12-01","net":31.9,"swap":4.2,"shn":36.2,"tah":true,"kur":3.9324,"yt":213.2,"yg":578,"yz":-364.8},{"t":"2017-12-08","net":34.2,"swap":4.2,"shn":38.5,"tah":true,"kur":3.8546,"yt":2958.1,"yg":1116.5,"yz":1841.6},{"t":"2017-12-15","net":35.1,"swap":4.2,"shn":39.4,"tah":true,"kur":3.8591,"yt":-492.7,"yg":162.2,"yz":-654.9},{"t":"2017-12-22","net":32.9,"swap":4.2,"shn":37.1,"tah":true,"kur":3.8113,"yt":1728.2,"yg":730.8,"yz":997.4},{"t":"2017-12-29","net":31.2,"swap":4.2,"shn":35.4,"tah":true,"kur":3.7719,"yt":-404.3,"yg":825.8,"yz":-1230.1},{"t":"2018-01-05","net":33.9,"swap":4.1,"shn":37.9,"tah":true,"kur":3.7456,"yt":199.4,"yg":722,"yz":-522.6},{"t":"2018-01-12","net":32.5,"swap":4.1,"shn":36.6,"tah":true,"kur":3.7622,"yt":637.2,"yg":179.1,"yz":458.2},{"t":"2018-01-19","net":33.9,"swap":4.1,"shn":38,"tah":true,"kur":3.7777,"yt":320.3,"yg":-188.8,"yz":509.1},{"t":"2018-01-26","net":34.4,"swap":4.1,"shn":38.4,"tah":true,"kur":3.7371,"yt":1582.1,"yg":787.4,"yz":794.7},{"t":"2018-02-02","net":34,"swap":3.5,"shn":37.4,"tah":true,"kur":3.7454,"yt":-1036.1,"yg":178.9,"yz":-1214.9},{"t":"2018-02-09","net":33,"swap":3.5,"shn":36.5,"tah":true,"kur":3.8119,"yt":-937.9,"yg":-793.3,"yz":-144.5},{"t":"2018-02-16","net":32.7,"swap":3.5,"shn":36.1,"tah":true,"kur":3.7523,"yt":1911.2,"yg":657.1,"yz":1254},{"t":"2018-02-23","net":31.7,"swap":3.5,"shn":35.2,"tah":true,"kur":3.7816,"yt":573,"yg":123.6,"yz":449.4},{"t":"2018-03-02","net":32.1,"swap":3.2,"shn":35.3,"tah":true,"kur":3.8038,"yt":-1084.2,"yg":-247.7,"yz":-836.5},{"t":"2018-03-09","net":32.2,"swap":3.2,"shn":35.3,"tah":true,"kur":3.8164,"yt":-19.1,"yg":-251.5,"yz":232.4},{"t":"2018-03-16","net":31,"swap":3.2,"shn":34.1,"tah":true,"kur":3.9039,"yt":-1219.3,"yg":-1168.7,"yz":-50.7},{"t":"2018-03-23","net":30.6,"swap":3.2,"shn":33.7,"tah":true,"kur":3.9608,"yt":-1149.5,"yg":-1452.6,"yz":303.1},{"t":"2018-03-30","net":29.6,"swap":3.2,"shn":32.8,"tah":true,"kur":3.9489,"yt":-1995.7,"yg":-523.5,"yz":-1472.3},{"t":"2018-04-06","net":26.5,"swap":4,"shn":30.5,"tah":true,"kur":4.0527,"yt":-518.2,"yg":-898,"yz":379.8},{"t":"2018-04-13","net":30.7,"swap":4,"shn":34.7,"tah":true,"kur":4.0785,"yt":981.4,"yg":-136.8,"yz":1118.2},{"t":"2018-04-20","net":29.8,"swap":4,"shn":33.7,"tah":true,"kur":4.0332,"yt":1481.9,"yg":680.9,"yz":801},{"t":"2018-04-27","net":32,"swap":4,"shn":35.9,"tah":true,"kur":4.0535,"yt":1493.3,"yg":326.9,"yz":1166.4},{"t":"2018-05-04","net":29.2,"swap":1.2,"shn":30.4,"tah":true,"kur":4.255,"yt":-2639.7,"yg":-937.9,"yz":-1701.8},{"t":"2018-05-11","net":32.5,"swap":1.2,"shn":33.7,"tah":true,"kur":4.2572,"yt":1395.9,"yg":-186.3,"yz":1582.2},{"t":"2018-05-18","net":30.5,"swap":1.2,"shn":31.6,"tah":true,"kur":4.4652,"yt":-997.7,"yg":-377.2,"yz":-620.5},{"t":"2018-05-25","net":29.7,"swap":1.2,"shn":30.8,"tah":true,"kur":4.7207,"yt":2843.8,"yg":1941.1,"yz":902.7},{"t":"2018-06-01","net":28.5,"swap":2.7,"shn":31.2,"tah":true,"kur":4.5922,"yt":-560,"yg":443.6,"yz":-1003.5},{"t":"2018-06-08","net":30.2,"swap":2.7,"shn":32.9,"tah":true,"kur":4.5024,"yt":1556.5,"yg":1172,"yz":384.5},{"t":"2018-06-15","net":27.1,"swap":2.7,"shn":29.8,"tah":true,"kur":4.6484,"yt":-900.8,"yg":-544.2,"yz":-356.6},{"t":"2018-06-22","net":30.5,"swap":2.7,"shn":33.2,"tah":true,"kur":4.7077,"yt":-1331.5,"yg":-946.9,"yz":-384.6},{"t":"2018-06-29","net":27.7,"swap":2.7,"shn":30.4,"tah":true,"kur":4.5607,"yt":-1932.5,"yg":461.3,"yz":-2393.8},{"t":"2018-07-06","net":28.1,"swap":3.2,"shn":31.4,"tah":true,"kur":4.6004,"yt":251.2,"yg":-162.9,"yz":414.1},{"t":"2018-07-13","net":27.7,"swap":3.2,"shn":31,"tah":true,"kur":4.842,"yt":-3438.7,"yg":-3206.1,"yz":-232.5},{"t":"2018-07-20","net":28.4,"swap":3.2,"shn":31.6,"tah":true,"kur":4.8,"yt":1154.5,"yg":524.4,"yz":630.1},{"t":"2018-07-27","net":27.8,"swap":3.2,"shn":31.1,"tah":true,"kur":4.8568,"yt":840.1,"yg":56.9,"yz":783.2},{"t":"2018-08-03","net":29.6,"swap":1.7,"shn":31.3,"tah":true,"kur":5.0778,"yt":-1775.3,"yg":-521.8,"yz":-1253.4},{"t":"2018-08-10","net":27.5,"swap":1.7,"shn":29.2,"tah":true,"kur":5.9389,"yt":1832.3,"yg":417.4,"yz":1415},{"t":"2018-08-17","net":27.8,"swap":1.7,"shn":29.5,"tah":true,"kur":5.9944,"yt":-7079.8,"yg":-5162.8,"yz":-1917.1},{"t":"2018-08-24","net":28.6,"swap":1.7,"shn":30.2,"tah":true,"kur":5.9944,"yt":465,"yg":119.5,"yz":345.5},{"t":"2018-08-31","net":26.1,"swap":1.7,"shn":27.8,"tah":true,"kur":6.5498,"yt":-1977,"yg":298.1,"yz":-2275.1},{"t":"2018-09-07","net":28.8,"swap":-0.8,"shn":28,"tah":true,"kur":6.469,"yt":-905.1,"yg":-545.8,"yz":-359.2},{"t":"2018-09-14","net":29.7,"swap":-0.8,"shn":28.9,"tah":true,"kur":6.0659,"yt":1843.9,"yg":1543.8,"yz":300.2},{"t":"2018-09-21","net":26.9,"swap":-0.8,"shn":26.1,"tah":true,"kur":6.2671,"yt":858.1,"yg":930.4,"yz":-72.3},{"t":"2018-09-28","net":26.8,"swap":-0.8,"shn":26,"tah":true,"kur":5.9902,"yt":723.3,"yg":1055.3,"yz":-332},{"t":"2018-10-05","net":26.6,"swap":-3.2,"shn":23.4,"tah":true,"kur":6.1543,"yt":-523,"yg":-105.8,"yz":-417.2},{"t":"2018-10-12","net":25.9,"swap":-3.2,"shn":22.6,"tah":true,"kur":5.9042,"yt":1770.5,"yg":549.9,"yz":1220.5},{"t":"2018-10-19","net":24.4,"swap":-3.2,"shn":21.1,"tah":true,"kur":5.6134,"yt":1361.2,"yg":557.1,"yz":804.2},{"t":"2018-10-26","net":27.2,"swap":-3.2,"shn":23.9,"tah":true,"kur":5.6186,"yt":1762.1,"yg":955.4,"yz":806.6},{"t":"2018-11-02","net":27.9,"swap":-3.6,"shn":24.3,"tah":true,"kur":5.4613,"yt":-301.8,"yg":772.6,"yz":-1074.4},{"t":"2018-11-09","net":27,"swap":-3.6,"shn":23.5,"tah":true,"kur":5.4819,"yt":995.5,"yg":660.6,"yz":334.9},{"t":"2018-11-16","net":28.6,"swap":-3.6,"shn":25,"tah":true,"kur":5.3412,"yt":861.5,"yg":802.2,"yz":59.3},{"t":"2018-11-23","net":28,"swap":-3.6,"shn":24.5,"tah":true,"kur":5.2771,"yt":308.6,"yg":625.1,"yz":-316.5},{"t":"2018-11-30","net":28.9,"swap":-3.6,"shn":25.4,"tah":true,"kur":5.157,"yt":-1738.1,"yg":119.3,"yz":-1857.4},{"t":"2018-12-07","net":29.4,"swap":-2.1,"shn":27.3,"tah":true,"kur":5.3257,"yt":467.6,"yg":232.2,"yz":235.4},{"t":"2018-12-14","net":29.5,"swap":-2.1,"shn":27.4,"tah":true,"kur":5.371,"yt":631.2,"yg":518.8,"yz":112.4},{"t":"2018-12-21","net":29.1,"swap":-2.1,"shn":27,"tah":true,"kur":5.2746,"yt":2505,"yg":594.4,"yz":1910.6},{"t":"2018-12-28","net":30.3,"swap":-2.1,"shn":28.2,"tah":true,"kur":5.2609,"yt":-1178.5,"yg":99.1,"yz":-1277.6},{"t":"2019-01-04","net":29.5,"swap":-1.8,"shn":27.7,"tah":true,"kur":5.4088,"yt":-872.8,"yg":270.1,"yz":-1143},{"t":"2019-01-11","net":27.9,"swap":-1.8,"shn":26.1,"tah":true,"kur":5.4242,"yt":1264.9,"yg":434.2,"yz":830.7},{"t":"2019-01-18","net":29.2,"swap":-1.8,"shn":27.3,"tah":true,"kur":5.3429,"yt":2559.4,"yg":1644.5,"yz":914.9},{"t":"2019-01-25","net":29,"swap":-1.8,"shn":27.2,"tah":true,"kur":5.2641,"yt":2313,"yg":1349.4,"yz":963.6},{"t":"2019-02-01","net":31.8,"swap":-1,"shn":30.8,"tah":true,"kur":5.1945,"yt":1531.7,"yg":1362.4,"yz":169.3},{"t":"2019-02-08","net":32.2,"swap":-1,"shn":31.3,"tah":true,"kur":5.2438,"yt":1387.3,"yg":739.1,"yz":648.2},{"t":"2019-02-15","net":32.5,"swap":-1,"shn":31.5,"tah":true,"kur":5.2601,"yt":732.2,"yg":309.4,"yz":422.8},{"t":"2019-02-22","net":34.1,"swap":-1,"shn":33.1,"tah":true,"kur":5.3168,"yt":217.3,"yg":233.4,"yz":-16.1},{"t":"2019-03-01","net":35,"swap":-1.1,"shn":33.9,"tah":true,"kur":5.3442,"yt":850.8,"yg":620,"yz":230.8},{"t":"2019-03-08","net":32.1,"swap":-1.1,"shn":31,"tah":true,"kur":5.4544,"yt":1676.9,"yg":1011.7,"yz":665.1},{"t":"2019-03-15","net":28.5,"swap":-1.1,"shn":27.4,"tah":true,"kur":5.4564,"yt":3516.8,"yg":1352.1,"yz":2164.7},{"t":"2019-03-22","net":25.7,"swap":-1.1,"shn":24.6,"tah":true,"kur":5.5274,"yt":3456,"yg":1282.4,"yz":2173.6},{"t":"2019-03-29","net":29.3,"swap":-1.1,"shn":28.1,"tah":true,"kur":5.6284,"yt":3246.9,"yg":2572.1,"yz":674.8},{"t":"2019-04-05","net":28.1,"swap":-13.1,"shn":15.1,"tah":true,"kur":5.5923,"yt":-9.6,"yg":-97.7,"yz":88.1},{"t":"2019-04-12","net":28.1,"swap":-13.1,"shn":15,"tah":true,"kur":5.7827,"yt":-1012.3,"yg":-722.1,"yz":-290.1},{"t":"2019-04-19","net":27,"swap":-13.1,"shn":13.9,"tah":true,"kur":5.7921,"yt":340.1,"yg":-16.5,"yz":356.6},{"t":"2019-04-26","net":25.7,"swap":-13.1,"shn":12.7,"tah":true,"kur":5.9233,"yt":-354.4,"yg":148.6,"yz":-503},{"t":"2019-05-03","net":25.8,"swap":-14.6,"shn":11.2,"tah":true,"kur":5.9602,"yt":-1309.6,"yg":420.2,"yz":-1729.8},{"t":"2019-05-10","net":27.1,"swap":-14.6,"shn":12.4,"tah":true,"kur":6.1129,"yt":1691,"yg":681.7,"yz":1009.3},{"t":"2019-05-17","net":24.7,"swap":-14.6,"shn":10.1,"tah":true,"kur":6.0463,"yt":1355.5,"yg":974.6,"yz":380.8},{"t":"2019-05-24","net":26.8,"swap":-14.6,"shn":12.2,"tah":true,"kur":6.0656,"yt":265.3,"yg":-165.7,"yz":431},{"t":"2019-05-31","net":28.2,"swap":-14.6,"shn":13.6,"tah":true,"kur":5.8613,"yt":566.5,"yg":1274.8,"yz":-708.4},{"t":"2019-06-07","net":28.5,"swap":-19.9,"shn":8.5,"tah":true,"kur":5.8354,"yt":1749.7,"yg":613.7,"yz":1136.1},{"t":"2019-06-14","net":28.6,"swap":-19.9,"shn":8.7,"tah":true,"kur":5.8826,"yt":-532.7,"yg":385.4,"yz":-918.1},{"t":"2019-06-21","net":28,"swap":-19.9,"shn":8.1,"tah":true,"kur":5.7915,"yt":817.3,"yg":847.9,"yz":-30.6},{"t":"2019-06-28","net":29.1,"swap":-19.9,"shn":9.1,"tah":true,"kur":5.7551,"yt":-1610.7,"yg":200.5,"yz":-1811.2},{"t":"2019-07-05","net":30.1,"swap":-18.1,"shn":12,"tah":true,"kur":5.6007,"yt":531.9,"yg":905.1,"yz":-373.3},{"t":"2019-07-12","net":32.1,"swap":-18.1,"shn":14,"tah":true,"kur":5.6916,"yt":219.2,"yg":349.2,"yz":-130},{"t":"2019-07-19","net":32,"swap":-18.1,"shn":13.9,"tah":true,"kur":5.6316,"yt":1052.6,"yg":276.5,"yz":776.1},{"t":"2019-07-26","net":32.5,"swap":-18.1,"shn":14.4,"tah":true,"kur":5.6564,"yt":662.7,"yg":616.2,"yz":46.5},{"t":"2019-08-02","net":32.2,"swap":-17,"shn":15.1,"tah":true,"kur":5.5809,"yt":-836.8,"yg":59.6,"yz":-896.3},{"t":"2019-08-09","net":35.3,"swap":-17,"shn":18.3,"tah":true,"kur":5.4809,"yt":-18.2,"yg":186.1,"yz":-204.3},{"t":"2019-08-16","net":34.7,"swap":-17,"shn":17.7,"tah":true,"kur":5.5398,"yt":4250.4,"yg":102.3,"yz":4148.1},{"t":"2019-08-23","net":35.2,"swap":-17,"shn":18.2,"tah":true,"kur":5.7538,"yt":-1399.4,"yg":-565,"yz":-834.4},{"t":"2019-08-30","net":34.9,"swap":-17,"shn":17.9,"tah":true,"kur":5.814,"yt":-120.7,"yg":280.7,"yz":-401.4},{"t":"2019-09-06","net":35.5,"swap":-17.3,"shn":18.3,"tah":true,"kur":5.6932,"yt":1332.9,"yg":854.9,"yz":478},{"t":"2019-09-13","net":35.1,"swap":-17.3,"shn":17.8,"tah":true,"kur":5.6665,"yt":1363.4,"yg":533.1,"yz":830.3},{"t":"2019-09-20","net":36.3,"swap":-17.3,"shn":19,"tah":true,"kur":5.6889,"yt":1496.2,"yg":399.4,"yz":1096.7},{"t":"2019-09-27","net":35.8,"swap":-17.3,"shn":18.5,"tah":true,"kur":5.6591,"yt":1633.8,"yg":733.5,"yz":900.2},{"t":"2019-10-04","net":37.1,"swap":-18.3,"shn":18.9,"tah":true,"kur":5.6894,"yt":-665.9,"yg":450,"yz":-1115.9},{"t":"2019-10-11","net":37,"swap":-18.3,"shn":18.7,"tah":true,"kur":5.8417,"yt":-737.2,"yg":-671.7,"yz":-65.4},{"t":"2019-10-18","net":35.6,"swap":-18.3,"shn":17.3,"tah":true,"kur":5.769,"yt":887.2,"yg":-473.6,"yz":1360.9},{"t":"2019-10-25","net":35.2,"swap":-18.3,"shn":16.9,"tah":true,"kur":5.7584,"yt":364.6,"yg":343.3,"yz":21.2},{"t":"2019-11-01","net":36.2,"swap":-18.5,"shn":17.7,"tah":true,"kur":5.7188,"yt":-634.5,"yg":570.9,"yz":-1205.5},{"t":"2019-11-08","net":34.7,"swap":-18.5,"shn":16.2,"tah":true,"kur":5.7429,"yt":925.7,"yg":645.7,"yz":280},{"t":"2019-11-15","net":36.8,"swap":-18.5,"shn":18.3,"tah":true,"kur":5.747,"yt":26.2,"yg":129.1,"yz":-102.9},{"t":"2019-11-22","net":37.5,"swap":-18.5,"shn":19,"tah":true,"kur":5.6919,"yt":775.6,"yg":571.5,"yz":204.1},{"t":"2019-11-29","net":37.9,"swap":-18.5,"shn":19.4,"tah":true,"kur":5.7403,"yt":-965.2,"yg":-95.4,"yz":-869.8},{"t":"2019-12-06","net":38.3,"swap":-18.3,"shn":20,"tah":true,"kur":5.7479,"yt":161.4,"yg":-137.5,"yz":298.9},{"t":"2019-12-13","net":38.4,"swap":-18.3,"shn":20.1,"tah":true,"kur":5.7726,"yt":-962.3,"yg":-374.4,"yz":-587.9},{"t":"2019-12-20","net":39.8,"swap":-18.3,"shn":21.5,"tah":true,"kur":5.9115,"yt":-274.4,"yg":-491.7,"yz":217.4},{"t":"2019-12-27","net":41.1,"swap":-18.3,"shn":22.8,"tah":true,"kur":5.937,"yt":-337.6,"yg":107.2,"yz":-444.7},{"t":"2020-01-03","net":40.9,"swap":-18.4,"shn":22.5,"tah":true,"kur":5.9627,"yt":302.2,"yg":521.7,"yz":-219.5},{"t":"2020-01-10","net":37.7,"swap":-18.4,"shn":19.2,"tah":true,"kur":5.8713,"yt":2028.8,"yg":461.9,"yz":1566.9},{"t":"2020-01-17","net":37.9,"swap":-18.4,"shn":19.5,"tah":true,"kur":5.8564,"yt":899.7,"yg":376.9,"yz":522.8},{"t":"2020-01-24","net":37.7,"swap":-18.4,"shn":19.3,"tah":true,"kur":5.9288,"yt":-424.2,"yg":-265.9,"yz":-158.3},{"t":"2020-01-31","net":36.8,"swap":-18.4,"shn":18.4,"tah":true,"kur":5.9726,"yt":-1975.1,"yg":-223.3,"yz":-1751.8},{"t":"2020-02-07","net":35.9,"swap":-19.8,"shn":16.1,"tah":true,"kur":5.9776,"yt":2153.6,"yg":539.3,"yz":1614.2},{"t":"2020-02-14","net":37.6,"swap":-19.8,"shn":17.8,"tah":true,"kur":6.047,"yt":234.2,"yg":-271.1,"yz":505.2},{"t":"2020-02-21","net":34.4,"swap":-19.8,"shn":14.6,"tah":true,"kur":6.1023,"yt":1691.6,"yg":700.2,"yz":991.4},{"t":"2020-02-28","net":37.6,"swap":-19.8,"shn":17.8,"tah":true,"kur":6.2259,"yt":1130.9,"yg":1421.3,"yz":-290.4},{"t":"2020-03-06","net":37.1,"swap":-26.9,"shn":10.2,"tah":true,"kur":6.0821,"yt":-762.5,"yg":-1140.7,"yz":378.2},{"t":"2020-03-13","net":34.1,"swap":-26.9,"shn":7.2,"tah":true,"kur":6.2711,"yt":1153.7,"yg":1418,"yz":-264.3},{"t":"2020-03-20","net":30.9,"swap":-26.9,"shn":4,"tah":true,"kur":6.4839,"yt":1061.6,"yg":-344.5,"yz":1406.1},{"t":"2020-03-27","net":32.7,"swap":-26.9,"shn":5.7,"tah":true,"kur":6.4346,"yt":-3904.6,"yg":-3535.7,"yz":-368.9},{"t":"2020-04-03","net":27,"swap":-30.9,"shn":-3.9,"tah":true,"kur":6.6903,"yt":-2059.7,"yg":-1531.7,"yz":-527.9},{"t":"2020-04-10","net":26.5,"swap":-30.9,"shn":-4.4,"tah":true,"kur":6.6877,"yt":-328.6,"yg":-451.1,"yz":122.5},{"t":"2020-04-17","net":25.9,"swap":-30.9,"shn":-5,"tah":true,"kur":6.913,"yt":469.4,"yg":565.6,"yz":-96.3},{"t":"2020-04-24","net":25.3,"swap":-30.9,"shn":-5.7,"tah":true,"kur":6.9589,"yt":-431.4,"yg":-1194.8,"yz":763.4},{"t":"2020-05-01","net":28,"swap":-37.8,"shn":-9.8,"tah":true,"kur":6.9719,"yt":-945.7,"yg":-59,"yz":-886.7},{"t":"2020-05-08","net":26.5,"swap":-37.8,"shn":-11.3,"tah":true,"kur":7.096,"yt":359,"yg":-488.1,"yz":847},{"t":"2020-05-15","net":26.1,"swap":-37.8,"shn":-11.7,"tah":true,"kur":6.9041,"yt":976.1,"yg":225.5,"yz":750.5},{"t":"2020-05-22","net":32,"swap":-37.8,"shn":-5.8,"tah":true,"kur":6.7917,"yt":3080.3,"yg":1864.9,"yz":1215.4},{"t":"2020-05-29","net":33,"swap":-37.8,"shn":-4.8,"tah":true,"kur":6.8138,"yt":1.1,"yg":146.4,"yz":-145.3},{"t":"2020-06-05","net":31.5,"swap":-55.3,"shn":-23.8,"tah":true,"kur":6.7573,"yt":917,"yg":43,"yz":873.9},{"t":"2020-06-12","net":31.5,"swap":-55.3,"shn":-23.8,"tah":true,"kur":6.8142,"yt":553.6,"yg":40.7,"yz":512.9},{"t":"2020-06-19","net":31.5,"swap":-55.3,"shn":-23.8,"tah":true,"kur":6.844,"yt":-723.9,"yg":69.3,"yz":-793.2},{"t":"2020-06-26","net":29.1,"swap":-55.3,"shn":-26.2,"tah":true,"kur":6.8417,"yt":80.9,"yg":-176.2,"yz":257.1},{"t":"2020-07-03","net":30.2,"swap":-58.9,"shn":-28.7,"tah":true,"kur":6.8422,"yt":-1330,"yg":561.2,"yz":-1891.2},{"t":"2020-07-10","net":32.2,"swap":-58.9,"shn":-26.7,"tah":true,"kur":6.8514,"yt":479.1,"yg":71.7,"yz":407.4},{"t":"2020-07-17","net":31,"swap":-58.9,"shn":-27.8,"tah":true,"kur":6.8439,"yt":952.3,"yg":913.9,"yz":38.4},{"t":"2020-07-24","net":28.7,"swap":-58.9,"shn":-30.1,"tah":true,"kur":6.8353,"yt":2296,"yg":1172.9,"yz":1123.1},{"t":"2020-07-31","net":26.5,"swap":-58.9,"shn":-32.4,"tah":true,"kur":6.9372,"yt":2837.5,"yg":3114.5,"yz":-277},{"t":"2020-08-07","net":27.3,"swap":-58.2,"shn":-31,"tah":true,"kur":7.2661,"yt":4673.5,"yg":3116.9,"yz":1556.6},{"t":"2020-08-14","net":28.6,"swap":-58.2,"shn":-29.6,"tah":true,"kur":7.3445,"yt":-249.5,"yg":-128.3,"yz":-121.1},{"t":"2020-08-21","net":28.5,"swap":-58.2,"shn":-29.7,"tah":true,"kur":7.2156,"yt":94.9,"yg":286.9,"yz":-192},{"t":"2020-08-28","net":23.3,"swap":-58.2,"shn":-35,"tah":true,"kur":7.305,"yt":-239.8,"yg":208.7,"yz":-448.5},{"t":"2020-09-04","net":18.5,"swap":-64,"shn":-45.5,"tah":true,"kur":7.4133,"yt":278.3,"yg":660.5,"yz":-382.2},{"t":"2020-09-11","net":20.1,"swap":-64,"shn":-43.9,"tah":true,"kur":7.4396,"yt":956.5,"yg":70.7,"yz":885.8},{"t":"2020-09-18","net":18.8,"swap":-64,"shn":-45.2,"tah":true,"kur":7.5344,"yt":-756.4,"yg":104.3,"yz":-860.7},{"t":"2020-09-25","net":17.2,"swap":-64,"shn":-46.8,"tah":true,"kur":7.5546,"yt":2200.2,"yg":977.1,"yz":1223.1},{"t":"2020-10-02","net":16.7,"swap":-62.9,"shn":-46.2,"tah":true,"kur":7.7288,"yt":-1010.3,"yg":437.4,"yz":-1447.7},{"t":"2020-10-09","net":17.1,"swap":-62.9,"shn":-45.8,"tah":true,"kur":7.9072,"yt":-79.9,"yg":-277.5,"yz":197.6},{"t":"2020-10-16","net":18.4,"swap":-62.9,"shn":-44.5,"tah":true,"kur":7.9129,"yt":340.2,"yg":176.2,"yz":164.1},{"t":"2020-10-23","net":20.9,"swap":-62.9,"shn":-42,"tah":true,"kur":7.9379,"yt":1893.5,"yg":911.2,"yz":982.2},{"t":"2020-10-30","net":18.5,"swap":-62.9,"shn":-44.4,"tah":true,"kur":8.3082,"yt":1693.6,"yg":1554.9,"yz":138.7},{"t":"2020-11-06","net":19.5,"swap":-66.9,"shn":-47.3,"tah":true,"kur":8.4613,"yt":1114.7,"yg":791.8,"yz":322.8},{"t":"2020-11-13","net":16.8,"swap":-66.9,"shn":-50.1,"tah":true,"kur":7.6297,"yt":2979.7,"yg":2075.6,"yz":904.1},{"t":"2020-11-20","net":18.7,"swap":-66.9,"shn":-48.2,"tah":true,"kur":7.5785,"yt":2341.1,"yg":2842.7,"yz":-501.6},{"t":"2020-11-27","net":13.9,"swap":-66.9,"shn":-53,"tah":true,"kur":7.7975,"yt":564.1,"yg":961.7,"yz":-397.6},{"t":"2020-12-04","net":15.7,"swap":-63.4,"shn":-47.7,"tah":true,"kur":7.7796,"yt":1400.5,"yg":1064.2,"yz":336.3},{"t":"2020-12-11","net":15.4,"swap":-63.4,"shn":-48,"tah":true,"kur":7.9349,"yt":634.3,"yg":431.7,"yz":202.5},{"t":"2020-12-18","net":17.2,"swap":-63.4,"shn":-46.2,"tah":true,"kur":7.6898,"yt":961.3,"yg":-54.3,"yz":1015.6},{"t":"2020-12-25","net":15.7,"swap":-63.4,"shn":-47.8,"tah":true,"kur":7.5517,"yt":1131.3,"yg":991.2,"yz":140.1},{"t":"2021-01-01","net":13.5,"swap":-61.9,"shn":-48.4,"tah":true,"kur":7.4194,"yt":22.6,"yg":1295.7,"yz":-1273.1},{"t":"2021-01-08","net":13.5,"swap":-61.9,"shn":-48.4,"tah":true,"kur":7.349,"yt":236.9,"yg":620.1,"yz":-383.2},{"t":"2021-01-15","net":11.4,"swap":-61.9,"shn":-50.5,"tah":true,"kur":7.3877,"yt":1095.9,"yg":102.1,"yz":993.8},{"t":"2021-01-22","net":11.1,"swap":-61.9,"shn":-50.8,"tah":true,"kur":7.3985,"yt":512.7,"yg":117.5,"yz":395.2},{"t":"2021-01-29","net":13.9,"swap":-61.9,"shn":-48.1,"tah":true,"kur":7.3216,"yt":-872.6,"yg":-391.5,"yz":-481.1},{"t":"2021-02-05","net":14.1,"swap":-59.3,"shn":-45.1,"tah":true,"kur":7.0789,"yt":-482.8,"yg":-173.7,"yz":-309.1},{"t":"2021-02-12","net":13.4,"swap":-59.3,"shn":-45.8,"tah":true,"kur":7.0162,"yt":1968.7,"yg":855.1,"yz":1113.6},{"t":"2021-02-19","net":12.1,"swap":-59.3,"shn":-47.1,"tah":true,"kur":6.9611,"yt":-28.8,"yg":139.4,"yz":-168.2},{"t":"2021-02-26","net":13.6,"swap":-59.3,"shn":-45.7,"tah":true,"kur":7.3708,"yt":-1761.1,"yg":367.3,"yz":-2128.4},{"t":"2021-03-05","net":11.5,"swap":-58,"shn":-46.5,"tah":true,"kur":7.5096,"yt":273.9,"yg":33.9,"yz":240},{"t":"2021-03-12","net":10.8,"swap":-58,"shn":-47.3,"tah":true,"kur":7.5709,"yt":-372.1,"yg":-618.1,"yz":246},{"t":"2021-03-19","net":14,"swap":-58,"shn":-44,"tah":true,"kur":7.267,"yt":1757.5,"yg":238.3,"yz":1519.2},{"t":"2021-03-26","net":12.7,"swap":-58,"shn":-45.3,"tah":true,"kur":7.9893,"yt":-8123.3,"yg":-6740.4,"yz":-1382.9},{"t":"2021-04-02","net":10.9,"swap":-59.8,"shn":-48.9,"tah":true,"kur":8.0362,"yt":-2026.2,"yg":-717.6,"yz":-1308.5},{"t":"2021-04-09","net":9.9,"swap":-59.8,"shn":-49.9,"tah":true,"kur":8.1383,"yt":398.3,"yg":-509.1,"yz":907.4},{"t":"2021-04-16","net":10.6,"swap":-59.8,"shn":-49.2,"tah":true,"kur":8.0574,"yt":1342.3,"yg":255.6,"yz":1086.7},{"t":"2021-04-23","net":11.2,"swap":-59.8,"shn":-48.6,"tah":true,"kur":8.2694,"yt":-766.8,"yg":-18.8,"yz":-748},{"t":"2021-04-30","net":11.9,"swap":-59.8,"shn":-47.9,"tah":true,"kur":8.2311,"yt":-203.7,"yg":204.1,"yz":-407.9},{"t":"2021-05-07","net":12.1,"swap":-60.6,"shn":-48.5,"tah":true,"kur":8.273,"yt":539.2,"yg":-80.9,"yz":620.1},{"t":"2021-05-14","net":12.7,"swap":-60.6,"shn":-47.9,"tah":true,"kur":8.2867,"yt":450,"yg":117.9,"yz":332.2},{"t":"2021-05-21","net":13.6,"swap":-60.6,"shn":-47.1,"tah":true,"kur":8.3554,"yt":-934.4,"yg":-549.8,"yz":-384.6},{"t":"2021-05-28","net":12.3,"swap":-60.6,"shn":-48.4,"tah":true,"kur":8.5496,"yt":110.5,"yg":276.7,"yz":-166.2},{"t":"2021-06-04","net":14.6,"swap":-60.1,"shn":-45.5,"tah":true,"kur":8.682,"yt":-34.2,"yg":453.4,"yz":-487.7},{"t":"2021-06-11","net":15.2,"swap":-60.1,"shn":-44.9,"tah":true,"kur":8.3547,"yt":806.3,"yg":-101.2,"yz":907.4},{"t":"2021-06-18","net":18.4,"swap":-60.1,"shn":-41.7,"tah":true,"kur":8.6646,"yt":712.9,"yg":454.6,"yz":258.2},{"t":"2021-06-25","net":20.9,"swap":-60.1,"shn":-39.2,"tah":true,"kur":8.6772,"yt":397.2,"yg":340.1,"yz":57.1},{"t":"2021-07-02","net":20.4,"swap":-65.2,"shn":-44.7,"tah":true,"kur":8.6797,"yt":119.8,"yg":341.7,"yz":-221.9},{"t":"2021-07-09","net":23.3,"swap":-65.2,"shn":-41.9,"tah":true,"kur":8.6715,"yt":1724,"yg":287.5,"yz":1436.5},{"t":"2021-07-16","net":24.4,"swap":-65.2,"shn":-40.7,"tah":true,"kur":8.5099,"yt":1726.5,"yg":732,"yz":994.6},{"t":"2021-07-23","net":23.8,"swap":-65.2,"shn":-41.4,"tah":true,"kur":8.5099,"yt":791.2,"yg":494.2,"yz":297},{"t":"2021-07-30","net":24.9,"swap":-65.2,"shn":-40.3,"tah":true,"kur":8.4139,"yt":351.7,"yg":326.7,"yz":25},{"t":"2021-08-06","net":25.1,"swap":-66,"shn":-40.9,"tah":true,"kur":8.5619,"yt":1663.9,"yg":701.1,"yz":962.7},{"t":"2021-08-13","net":24.2,"swap":-66,"shn":-41.8,"tah":true,"kur":8.5359,"yt":861.3,"yg":580.4,"yz":280.9},{"t":"2021-08-20","net":25.7,"swap":-66,"shn":-40.3,"tah":true,"kur":8.5254,"yt":62.3,"yg":465,"yz":-402.7},{"t":"2021-08-27","net":26.4,"swap":-66,"shn":-39.6,"tah":true,"kur":8.3753,"yt":3078.7,"yg":688,"yz":2390.6},{"t":"2021-09-03","net":27.7,"swap":-67.2,"shn":-39.4,"tah":true,"kur":8.295,"yt":1038.1,"yg":900.9,"yz":137.2},{"t":"2021-09-10","net":29.1,"swap":-67.2,"shn":-38.1,"tah":true,"kur":8.4044,"yt":488.6,"yg":20.4,"yz":468.2},{"t":"2021-09-17","net":28,"swap":-67.2,"shn":-39.2,"tah":true,"kur":8.5678,"yt":347.8,"yg":-87.8,"yz":435.6},{"t":"2021-09-24","net":29.9,"swap":-67.2,"shn":-37.3,"tah":true,"kur":8.824,"yt":-1696,"yg":-1006.5,"yz":-689.6},{"t":"2021-10-01","net":29.4,"swap":-68.5,"shn":-39.1,"tah":true,"kur":8.8469,"yt":-1703.8,"yg":-548.4,"yz":-1155.4},{"t":"2021-10-08","net":29.5,"swap":-68.5,"shn":-39,"tah":true,"kur":8.8982,"yt":1714.6,"yg":-114.4,"yz":1829},{"t":"2021-10-15","net":31.9,"swap":-68.5,"shn":-36.6,"tah":true,"kur":9.1993,"yt":-421.8,"yg":-756.4,"yz":334.6},{"t":"2021-10-22","net":31.4,"swap":-68.5,"shn":-37.1,"tah":true,"kur":9.586,"yt":-496.9,"yg":-525.6,"yz":28.7},{"t":"2021-10-29","net":32.6,"swap":-68.5,"shn":-35.9,"tah":true,"kur":9.4813,"yt":-1438.9,"yg":-720.3,"yz":-718.6},{"t":"2021-11-05","net":31.8,"swap":-68.3,"shn":-36.5,"tah":true,"kur":9.7,"yt":953.3,"yg":281.8,"yz":671.4},{"t":"2021-11-12","net":28.6,"swap":-68.3,"shn":-39.7,"tah":true,"kur":9.9105,"yt":1482.9,"yg":234.3,"yz":1248.6},{"t":"2021-11-19","net":24.4,"swap":-68.3,"shn":-43.9,"tah":true,"kur":11.0266,"yt":524.4,"yg":1138.2,"yz":-613.9},{"t":"2021-11-26","net":24.5,"swap":-68.3,"shn":-43.8,"tah":true,"kur":12.0786,"yt":-1847.9,"yg":-957.5,"yz":-890.4},{"t":"2021-12-03","net":22,"swap":-60.6,"shn":-38.6,"tah":true,"kur":13.6801,"yt":-667.4,"yg":-227.5,"yz":-439.9},{"t":"2021-12-10","net":21,"swap":-60.6,"shn":-39.6,"tah":true,"kur":13.8346,"yt":762.5,"yg":-71.2,"yz":833.7},{"t":"2021-12-17","net":11.3,"swap":-60.6,"shn":-49.3,"tah":true,"kur":16.3358,"yt":5432.1,"yg":4028.8,"yz":1403.3},{"t":"2021-12-24","net":8.4,"swap":-60.6,"shn":-52.2,"tah":true,"kur":11.7278,"yt":1458.1,"yg":-135.9,"yz":1594.1},{"t":"2021-12-31","net":8.1,"swap":-60.6,"shn":-52.5,"tah":true,"kur":13.329,"yt":-2574.4,"yg":350.5,"yz":-2924.9},{"t":"2022-01-07","net":7.9,"swap":-64.7,"shn":-56.8,"tah":true,"kur":13.7526,"yt":-2200.3,"yg":-1070.4,"yz":-1129.9},{"t":"2022-01-14","net":7.6,"swap":-64.7,"shn":-57.1,"tah":true,"kur":13.5054,"yt":-1396.4,"yg":-828.5,"yz":-567.9},{"t":"2022-01-21","net":9.3,"swap":-64.7,"shn":-55.4,"tah":true,"kur":13.402,"yt":-1510.4,"yg":-1370.7,"yz":-139.7},{"t":"2022-01-28","net":10.5,"swap":-64.7,"shn":-54.2,"tah":true,"kur":13.6066,"yt":-2185.7,"yg":-1427.3,"yz":-758.3},{"t":"2022-02-04","net":16.4,"swap":-65,"shn":-48.6,"tah":true,"kur":13.5336,"yt":-5078.5,"yg":-910.9,"yz":-4167.6},{"t":"2022-02-11","net":15.9,"swap":-65,"shn":-49.1,"tah":true,"kur":13.4933,"yt":-2126.2,"yg":-680.5,"yz":-1445.7},{"t":"2022-02-18","net":19.8,"swap":-65,"shn":-45.2,"tah":true,"kur":13.6118,"yt":-7798.5,"yg":-766.8,"yz":-7031.7},{"t":"2022-02-25","net":18.4,"swap":-65,"shn":-46.5,"tah":true,"kur":14.0395,"yt":184.5,"yg":1207.3,"yz":-1022.7},{"t":"2022-03-04","net":18.1,"swap":-60.9,"shn":-42.8,"tah":true,"kur":14.1766,"yt":-607.4,"yg":-518.3,"yz":-89},{"t":"2022-03-11","net":15.7,"swap":-60.9,"shn":-45.2,"tah":true,"kur":14.9042,"yt":919.1,"yg":-895.1,"yz":1814.3},{"t":"2022-03-18","net":17.1,"swap":-60.9,"shn":-43.8,"tah":true,"kur":14.764,"yt":827.9,"yg":-314.3,"yz":1142.1},{"t":"2022-03-25","net":16,"swap":-60.9,"shn":-44.9,"tah":true,"kur":14.8068,"yt":1154.3,"yg":-391.9,"yz":1546.1},{"t":"2022-04-01","net":16.4,"swap":-62.1,"shn":-45.8,"tah":true,"kur":14.6609,"yt":-1533.2,"yg":-281.4,"yz":-1251.7},{"t":"2022-04-08","net":18.3,"swap":-62.1,"shn":-43.8,"tah":true,"kur":14.7213,"yt":677.7,"yg":-303.4,"yz":981.1},{"t":"2022-04-15","net":19.1,"swap":-62.1,"shn":-43,"tah":true,"kur":14.6181,"yt":804.8,"yg":-175.5,"yz":980.3},{"t":"2022-04-22","net":17.1,"swap":-62.1,"shn":-45,"tah":true,"kur":14.7068,"yt":-228.2,"yg":-143.6,"yz":-84.6},{"t":"2022-04-29","net":17,"swap":-62.1,"shn":-45.1,"tah":true,"kur":14.7852,"yt":-39.2,"yg":84.9,"yz":-124.1},{"t":"2022-05-06","net":14.9,"swap":-64.6,"shn":-49.7,"tah":true,"kur":14.8978,"yt":1742,"yg":403,"yz":1339},{"t":"2022-05-13","net":11.5,"swap":-64.6,"shn":-53.1,"tah":true,"kur":15.4378,"yt":1041.7,"yg":-118.9,"yz":1160.6},{"t":"2022-05-20","net":9.6,"swap":-64.6,"shn":-55.1,"tah":true,"kur":15.9249,"yt":-1041.7,"yg":-150.2,"yz":-891.6},{"t":"2022-05-27","net":12.2,"swap":-64.6,"shn":-52.4,"tah":true,"kur":16.3479,"yt":-1013.9,"yg":-752,"yz":-261.9},{"t":"2022-06-03","net":10.5,"swap":-64.5,"shn":-54,"tah":true,"kur":16.4765,"yt":671.8,"yg":315.4,"yz":356.4},{"t":"2022-06-10","net":8.2,"swap":-64.5,"shn":-56.3,"tah":true,"kur":17.0589,"yt":-851.9,"yg":-1324,"yz":472.1},{"t":"2022-06-17","net":7.4,"swap":-64.5,"shn":-57.1,"tah":true,"kur":17.2905,"yt":-173.9,"yg":-719.6,"yz":545.6},{"t":"2022-06-24","net":7.5,"swap":-64.5,"shn":-57,"tah":true,"kur":17.3478,"yt":768,"yg":77.2,"yz":690.8},{"t":"2022-07-01","net":7.5,"swap":-63,"shn":-55.5,"tah":true,"kur":16.7155,"yt":-2266.4,"yg":329.5,"yz":-2595.9},{"t":"2022-07-08","net":6.1,"swap":-63,"shn":-56.9,"tah":true,"kur":17.2601,"yt":1443.4,"yg":520.8,"yz":922.6},{"t":"2022-07-15","net":6.4,"swap":-63,"shn":-56.6,"tah":true,"kur":17.4581,"yt":2073.2,"yg":270,"yz":1803.2},{"t":"2022-07-22","net":6.7,"swap":-63,"shn":-56.3,"tah":true,"kur":17.711,"yt":-741.8,"yg":-513,"yz":-228.8},{"t":"2022-07-29","net":9.1,"swap":-63,"shn":-53.8,"tah":true,"kur":17.8939,"yt":1947.9,"yg":-192.9,"yz":2140.8},{"t":"2022-08-05","net":11.8,"swap":-63.9,"shn":-52.1,"tah":true,"kur":17.9362,"yt":3766.4,"yg":-498.3,"yz":4264.7},{"t":"2022-08-12","net":15.7,"swap":-63.9,"shn":-48.2,"tah":true,"kur":17.9366,"yt":-312.6,"yg":-267.3,"yz":-45.2},{"t":"2022-08-19","net":13.8,"swap":-63.9,"shn":-50.1,"tah":true,"kur":18.0767,"yt":-1364.9,"yg":70.9,"yz":-1435.9},{"t":"2022-08-26","net":12.6,"swap":-63.9,"shn":-51.3,"tah":true,"kur":18.1564,"yt":-846.5,"yg":-470.5,"yz":-376},{"t":"2022-09-02","net":14.1,"swap":-64.7,"shn":-50.7,"tah":true,"kur":18.2009,"yt":-328.9,"yg":-12.4,"yz":-316.5},{"t":"2022-09-09","net":14.1,"swap":-64.7,"shn":-50.6,"tah":true,"kur":18.2189,"yt":662.6,"yg":-399.9,"yz":1062.4},{"t":"2022-09-16","net":12.1,"swap":-64.7,"shn":-52.6,"tah":true,"kur":18.2474,"yt":1642,"yg":104.6,"yz":1537.4},{"t":"2022-09-23","net":9.7,"swap":-64.7,"shn":-55.1,"tah":true,"kur":18.3702,"yt":-1051,"yg":-160.7,"yz":-890.4},{"t":"2022-09-30","net":9.7,"swap":-64.7,"shn":-55,"tah":true,"kur":18.5187,"yt":-469.9,"yg":-79.8,"yz":-390.1},{"t":"2022-10-07","net":12.4,"swap":-68.7,"shn":-56.3,"tah":true,"kur":18.5592,"yt":2257.7,"yg":-367.5,"yz":2625.2},{"t":"2022-10-14","net":14.1,"swap":-68.7,"shn":-54.7,"tah":true,"kur":18.5596,"yt":1339.8,"yg":-164.3,"yz":1504.1},{"t":"2022-10-21","net":11.6,"swap":-68.7,"shn":-57.2,"tah":true,"kur":18.5741,"yt":790.5,"yg":-94.4,"yz":884.9},{"t":"2022-10-28","net":13.4,"swap":-68.7,"shn":-55.3,"tah":true,"kur":18.588,"yt":-2950.2,"yg":-548.3,"yz":-2401.9},{"t":"2022-11-04","net":14.5,"swap":-72.1,"shn":-57.6,"tah":true,"kur":18.5936,"yt":198.6,"yg":-921.7,"yz":1120.3},{"t":"2022-11-11","net":18.3,"swap":-72.1,"shn":-53.8,"tah":true,"kur":18.5115,"yt":-3720.7,"yg":-2243.3,"yz":-1477.4},{"t":"2022-11-18","net":18.7,"swap":-72.1,"shn":-53.3,"tah":true,"kur":18.5945,"yt":-3020.8,"yg":-1478.7,"yz":-1542.1},{"t":"2022-11-25","net":19.5,"swap":-72.1,"shn":-52.6,"tah":true,"kur":18.6071,"yt":-5534,"yg":-1939.7,"yz":-3594.3},{"t":"2022-12-02","net":23.1,"swap":-68.4,"shn":-45.3,"tah":true,"kur":18.6103,"yt":-2357.3,"yg":-2016,"yz":-341.3},{"t":"2022-12-09","net":26.8,"swap":-68.4,"shn":-41.7,"tah":true,"kur":18.6208,"yt":-2644.4,"yg":-1670.8,"yz":-973.6},{"t":"2022-12-16","net":28.1,"swap":-68.4,"shn":-40.3,"tah":true,"kur":18.6268,"yt":-2419.5,"yg":-1886.3,"yz":-533.2},{"t":"2022-12-23","net":26.7,"swap":-68.4,"shn":-41.8,"tah":true,"kur":18.6592,"yt":-5036.6,"yg":-2327.1,"yz":-2709.5},{"t":"2022-12-30","net":27.5,"swap":-68.4,"shn":-40.9,"tah":true,"kur":18.6983,"yt":-3068.5,"yg":-637,"yz":-2431.5},{"t":"2023-01-06","net":24.3,"swap":-71,"shn":-46.7,"tah":true,"kur":18.7498,"yt":3238.1,"yg":680.9,"yz":2557.2},{"t":"2023-01-13","net":24.9,"swap":-71,"shn":-46.1,"tah":true,"kur":18.7592,"yt":636,"yg":-179.1,"yz":815},{"t":"2023-01-20","net":26.7,"swap":-71,"shn":-44.3,"tah":true,"kur":18.7771,"yt":-605.5,"yg":-886.4,"yz":280.9},{"t":"2023-01-27","net":25.8,"swap":-71,"shn":-45.2,"tah":true,"kur":18.7852,"yt":-2085.4,"yg":-763,"yz":-1322.4},{"t":"2023-02-03","net":27.1,"swap":-70.6,"shn":-43.6,"tah":true,"kur":18.7948,"yt":-319.3,"yg":-1045.8,"yz":726.5},{"t":"2023-02-10","net":24.4,"swap":-70.6,"shn":-46.2,"tah":true,"kur":18.8112,"yt":-252.6,"yg":-448.3,"yz":195.7},{"t":"2023-02-17","net":21.4,"swap":-70.6,"shn":-49.3,"tah":true,"kur":18.836,"yt":-2017,"yg":-775.7,"yz":-1241.4},{"t":"2023-02-24","net":20.2,"swap":-70.6,"shn":-50.5,"tah":true,"kur":18.8567,"yt":-4157.3,"yg":-1886.4,"yz":-2270.8},{"t":"2023-03-03","net":20.7,"swap":-62.3,"shn":-41.6,"tah":true,"kur":18.8587,"yt":-112,"yg":6,"yz":-118},{"t":"2023-03-10","net":18.6,"swap":-62.3,"shn":-43.7,"tah":true,"kur":18.9374,"yt":1178.9,"yg":-10.8,"yz":1189.8},{"t":"2023-03-17","net":20,"swap":-62.3,"shn":-42.3,"tah":true,"kur":18.9785,"yt":-2661.4,"yg":-1346.4,"yz":-1314.9},{"t":"2023-03-24","net":18.9,"swap":-62.3,"shn":-43.4,"tah":true,"kur":19.0371,"yt":-1667.5,"yg":-998.4,"yz":-669.2},{"t":"2023-03-31","net":18.5,"swap":-62.3,"shn":-43.9,"tah":true,"kur":19.1532,"yt":-3132.8,"yg":-801.9,"yz":-2330.9},{"t":"2023-04-07","net":13.8,"swap":-61.4,"shn":-47.7,"tah":true,"kur":19.2332,"yt":3151.8,"yg":567.1,"yz":2584.7},{"t":"2023-04-14","net":12,"swap":-61.4,"shn":-49.4,"tah":true,"kur":19.3363,"yt":-604.9,"yg":-467.6,"yz":-137.4},{"t":"2023-04-21","net":8.3,"swap":-61.4,"shn":-53.1,"tah":true,"kur":19.3806,"yt":1894.5,"yg":827.4,"yz":1067.1},{"t":"2023-04-28","net":6.4,"swap":-61.4,"shn":-55.1,"tah":true,"kur":19.4268,"yt":-2158.5,"yg":-335.9,"yz":-1822.5},{"t":"2023-05-05","net":6.8,"swap":-59,"shn":-52.2,"tah":true,"kur":19.4747,"yt":1371.4,"yg":-299.1,"yz":1670.5},{"t":"2023-05-12","net":2.3,"swap":-59,"shn":-56.7,"tah":true,"kur":19.5649,"yt":-2189.7,"yg":528.3,"yz":-2718},{"t":"2023-05-19","net":-0.2,"swap":-59,"shn":-59.2,"tah":true,"kur":19.7607,"yt":-1669.4,"yg":-1670.9,"yz":1.5},{"t":"2023-05-26","net":-4.4,"swap":-59,"shn":-63.4,"tah":true,"kur":19.9512,"yt":-6291.1,"yg":-3397.4,"yz":-2893.6},{"t":"2023-06-02","net":-5.7,"swap":-55,"shn":-60.6,"tah":true,"kur":20.8447,"yt":-1050.9,"yg":-740.9,"yz":-310},{"t":"2023-06-09","net":-3.2,"swap":-55,"shn":-58.1,"tah":true,"kur":23.4314,"yt":-1640.1,"yg":-284.2,"yz":-1355.9},{"t":"2023-06-16","net":0.5,"swap":-55,"shn":-54.5,"tah":true,"kur":23.6388,"yt":1776.7,"yg":-460.3,"yz":2237},{"t":"2023-06-23","net":8.6,"swap":-55,"shn":-46.4,"tah":true,"kur":25.2505,"yt":-7464.7,"yg":-2242.8,"yz":-5221.9},{"t":"2023-06-30","net":9.8,"swap":-55,"shn":-45.1,"tah":true,"kur":25.8231,"yt":69.2,"yg":478.8,"yz":-409.6},{"t":"2023-07-07","net":13.2,"swap":-60.1,"shn":-47,"tah":true,"kur":26.0381,"yt":453.4,"yg":149.9,"yz":303.5},{"t":"2023-07-14","net":13.2,"swap":-60.1,"shn":-46.9,"tah":true,"kur":26.1446,"yt":378.4,"yg":-279.1,"yz":657.5},{"t":"2023-07-21","net":13.7,"swap":-60.1,"shn":-46.5,"tah":true,"kur":26.8944,"yt":150.3,"yg":206.5,"yz":-56.1},{"t":"2023-07-28","net":10.9,"swap":-60.1,"shn":-49.2,"tah":true,"kur":26.9394,"yt":1417.2,"yg":1287,"yz":130.2},{"t":"2023-08-04","net":15.7,"swap":-60.4,"shn":-44.7,"tah":true,"kur":26.9545,"yt":-804.3,"yg":-2156.5,"yz":1352.3},{"t":"2023-08-11","net":15.7,"swap":-60.4,"shn":-44.7,"tah":true,"kur":27.0059,"yt":2165.1,"yg":328.3,"yz":1836.8},{"t":"2023-08-18","net":15.7,"swap":-60.4,"shn":-44.7,"tah":true,"kur":27.0606,"yt":2570.2,"yg":1256.7,"yz":1313.5},{"t":"2023-08-25","net":14.7,"swap":-60.4,"shn":-45.7,"tah":true,"kur":26.406,"yt":4783,"yg":3160.4,"yz":1622.6},{"t":"2023-09-01","net":16.1,"swap":-72.3,"shn":-56.2,"tah":true,"kur":26.6783,"yt":-760.7,"yg":306.6,"yz":-1067.4},{"t":"2023-09-08","net":16.3,"swap":-72.3,"shn":-56.1,"tah":true,"kur":26.8087,"yt":251,"yg":-547.9,"yz":798.9},{"t":"2023-09-15","net":17.6,"swap":-72.3,"shn":-54.8,"tah":true,"kur":26.93,"yt":-692.4,"yg":-662.1,"yz":-30.3},{"t":"2023-09-22","net":23.9,"swap":-72.3,"shn":-48.4,"tah":true,"kur":27.1039,"yt":-1159.8,"yg":-1154.8,"yz":-5},{"t":"2023-09-29","net":20.6,"swap":-72.3,"shn":-51.7,"tah":true,"kur":27.3767,"yt":-2419.5,"yg":-877.4,"yz":-1542.2},{"t":"2023-10-06","net":20.7,"swap":-77,"shn":-56.2,"tah":true,"kur":27.558,"yt":548.9,"yg":-571.4,"yz":1120.2},{"t":"2023-10-13","net":22,"swap":-77,"shn":-54.9,"tah":true,"kur":27.7439,"yt":717.7,"yg":-91.1,"yz":808.8},{"t":"2023-10-20","net":22.5,"swap":-77,"shn":-54.4,"tah":true,"kur":27.9714,"yt":453.2,"yg":-453.8,"yz":907},{"t":"2023-10-27","net":25.1,"swap":-77,"shn":-51.8,"tah":true,"kur":28.1258,"yt":140.9,"yg":-731,"yz":871.9},{"t":"2023-11-03","net":24.7,"swap":-81.4,"shn":-56.7,"tah":true,"kur":28.3479,"yt":-186.3,"yg":-56,"yz":-130.3},{"t":"2023-11-10","net":25.4,"swap":-81.4,"shn":-55.9,"tah":true,"kur":28.4857,"yt":403,"yg":-237.1,"yz":640.1},{"t":"2023-11-17","net":29,"swap":-81.4,"shn":-52.4,"tah":true,"kur":28.6592,"yt":-685.1,"yg":-424.7,"yz":-260.4},{"t":"2023-11-24","net":35.8,"swap":-81.4,"shn":-45.6,"tah":true,"kur":28.8088,"yt":-1043.4,"yg":-423.5,"yz":-619.9},{"t":"2023-12-01","net":34.7,"swap":-82,"shn":-47.3,"tah":true,"kur":28.8553,"yt":-773.6,"yg":-558.3,"yz":-215.3},{"t":"2023-12-08","net":38.1,"swap":-82,"shn":-43.9,"tah":true,"kur":28.8974,"yt":485.2,"yg":-483,"yz":968.1},{"t":"2023-12-15","net":37.2,"swap":-82,"shn":-44.8,"tah":true,"kur":28.9847,"yt":-327.3,"yg":-309.1,"yz":-18.3},{"t":"2023-12-22","net":40,"swap":-82,"shn":-42,"tah":true,"kur":29.1344,"yt":408,"yg":179.5,"yz":228.5},{"t":"2023-12-29","net":34.9,"swap":-82,"shn":-47.1,"tah":true,"kur":29.4382,"yt":-1352,"yg":505,"yz":-1857},{"t":"2024-01-05","net":32.2,"swap":-72.4,"shn":-40.2,"tah":true,"kur":29.7714,"yt":720.4,"yg":324.2,"yz":396.2},{"t":"2024-01-12","net":29.4,"swap":-72.4,"shn":-43,"tah":true,"kur":30.0163,"yt":926,"yg":349.8,"yz":576.2},{"t":"2024-01-19","net":23.6,"swap":-72.4,"shn":-48.8,"tah":true,"kur":30.1219,"yt":980.1,"yg":232.1,"yz":747.9},{"t":"2024-01-26","net":30.7,"swap":-72.4,"shn":-41.7,"tah":true,"kur":30.2343,"yt":1231.1,"yg":803.8,"yz":427.3},{"t":"2024-02-02","net":28,"swap":-73.3,"shn":-45.4,"tah":true,"kur":30.3735,"yt":-2383.4,"yg":674.1,"yz":-3057.4},{"t":"2024-02-09","net":28.7,"swap":-73.3,"shn":-44.6,"tah":true,"kur":30.6005,"yt":30.6,"yg":-583.7,"yz":614.3},{"t":"2024-02-16","net":28.4,"swap":-73.3,"shn":-44.9,"tah":true,"kur":30.7221,"yt":-617.8,"yg":-30.9,"yz":-586.9},{"t":"2024-02-23","net":22.4,"swap":-73.3,"shn":-50.9,"tah":true,"kur":31.0047,"yt":1140.8,"yg":256.9,"yz":883.9},{"t":"2024-03-01","net":20.5,"swap":-67.2,"shn":-46.7,"tah":true,"kur":31.2392,"yt":-1264.6,"yg":628.6,"yz":-1893.2},{"t":"2024-03-08","net":20.8,"swap":-67.2,"shn":-46.4,"tah":true,"kur":31.8618,"yt":3180.4,"yg":1280.9,"yz":1899.4},{"t":"2024-03-15","net":19.6,"swap":-67.2,"shn":-47.6,"tah":true,"kur":32.1214,"yt":1849.6,"yg":1515.3,"yz":334.4},{"t":"2024-03-22","net":15.4,"swap":-67.2,"shn":-51.8,"tah":true,"kur":31.9675,"yt":3607.9,"yg":2211.2,"yz":1396.7},{"t":"2024-03-29","net":15.4,"swap":-67.2,"shn":-51.7,"tah":true,"kur":32.2854,"yt":-2703.4,"yg":302.8,"yz":-3006.2},{"t":"2024-04-05","net":19.7,"swap":-81,"shn":-61.3,"tah":true,"kur":31.9209,"yt":-4587.5,"yg":-1725.7,"yz":-2861.8},{"t":"2024-04-12","net":20.9,"swap":-81,"shn":-60.1,"tah":true,"kur":32.006,"yt":-343.7,"yg":-458.1,"yz":114.4},{"t":"2024-04-19","net":15,"swap":-81,"shn":-66,"tah":true,"kur":32.5096,"yt":1056.2,"yg":-404,"yz":1460.3},{"t":"2024-04-26","net":14,"swap":-81,"shn":-67,"tah":true,"kur":32.4527,"yt":-2214.6,"yg":-1287.3,"yz":-927.3},{"t":"2024-05-03","net":21.1,"swap":-63.5,"shn":-42.4,"tah":true,"kur":32.2472,"yt":-2985.7,"yg":-921.1,"yz":-2064.6},{"t":"2024-05-10","net":30.9,"swap":-63.5,"shn":-32.6,"tah":true,"kur":32.1534,"yt":-4293.2,"yg":-2197.3,"yz":-2095.9},{"t":"2024-05-17","net":33.8,"swap":-63.5,"shn":-29.7,"tah":true,"kur":32.194,"yt":-1215.9,"yg":-1147.2,"yz":-68.7},{"t":"2024-05-24","net":40.3,"swap":-63.5,"shn":-23.2,"tah":true,"kur":32.1452,"yt":-708,"yg":-1516.5,"yz":808.5},{"t":"2024-05-31","net":45.6,"swap":-63.5,"shn":-17.9,"tah":true,"kur":32.1339,"yt":-3368.6,"yg":-1229.5,"yz":-2139.2},{"t":"2024-06-07","net":47.5,"swap":-44,"shn":3.5,"tah":true,"kur":32.1923,"yt":-1649.2,"yg":-843.2,"yz":-806},{"t":"2024-06-14","net":46.7,"swap":-44,"shn":2.7,"tah":true,"kur":32.4579,"yt":-1675.7,"yg":-874.8,"yz":-800.9},{"t":"2024-06-21","net":44.6,"swap":-44,"shn":0.6,"tah":true,"kur":32.781,"yt":1596.7,"yg":44.8,"yz":1552},{"t":"2024-06-28","net":39.4,"swap":-44,"shn":-4.6,"tah":true,"kur":32.8262,"yt":-1796.9,"yg":-231.4,"yz":-1565.5},{"t":"2024-07-05","net":43.4,"swap":-27.8,"shn":15.6,"tah":true,"kur":32.6301,"yt":-1856.1,"yg":-257.5,"yz":-1598.6},{"t":"2024-07-12","net":47.6,"swap":-27.8,"shn":19.8,"tah":true,"kur":32.9069,"yt":561.4,"yg":-221.2,"yz":782.6},{"t":"2024-07-19","net":48.2,"swap":-27.8,"shn":20.4,"tah":true,"kur":33.0042,"yt":1369.7,"yg":346.5,"yz":1023.2},{"t":"2024-07-26","net":47.6,"swap":-27.8,"shn":19.8,"tah":true,"kur":32.9586,"yt":439.8,"yg":-76.4,"yz":516.2},{"t":"2024-08-02","net":51.5,"swap":-23.1,"shn":28.3,"tah":true,"kur":33.0763,"yt":-848.6,"yg":118.6,"yz":-967.2},{"t":"2024-08-09","net":46.9,"swap":-23.1,"shn":23.8,"tah":true,"kur":33.4596,"yt":2795.3,"yg":675.1,"yz":2120.2},{"t":"2024-08-16","net":47.7,"swap":-23.1,"shn":24.6,"tah":true,"kur":33.6107,"yt":40.2,"yg":363.3,"yz":-323},{"t":"2024-08-23","net":43.6,"swap":-23.1,"shn":20.5,"tah":true,"kur":33.8863,"yt":2000.4,"yg":568.8,"yz":1431.6},{"t":"2024-08-30","net":40.9,"swap":-23.1,"shn":17.8,"tah":true,"kur":33.9233,"yt":-1224.4,"yg":-112.3,"yz":-1112.1},{"t":"2024-09-06","net":39.8,"swap":-22.3,"shn":17.4,"tah":true,"kur":33.8937,"yt":1149.9,"yg":26,"yz":1123.9},{"t":"2024-09-13","net":48.9,"swap":-22.3,"shn":26.6,"tah":true,"kur":33.8159,"yt":-2882.7,"yg":-424.7,"yz":-2458},{"t":"2024-09-20","net":51.8,"swap":-22.3,"shn":29.5,"tah":true,"kur":33.9531,"yt":870.5,"yg":-361.1,"yz":1231.5},{"t":"2024-09-27","net":54.1,"swap":-22.3,"shn":31.8,"tah":true,"kur":34.09,"yt":-2974.7,"yg":-894,"yz":-2080.7},{"t":"2024-10-04","net":56,"swap":-21.2,"shn":34.8,"tah":true,"kur":34.1398,"yt":1096.7,"yg":374.7,"yz":722},{"t":"2024-10-11","net":58.3,"swap":-21.2,"shn":37.1,"tah":true,"kur":34.1625,"yt":-2732.6,"yg":-299.2,"yz":-2433.4},{"t":"2024-10-18","net":60.5,"swap":-21.2,"shn":39.3,"tah":true,"kur":34.1786,"yt":2013.8,"yg":-8.7,"yz":2022.5},{"t":"2024-10-25","net":60.9,"swap":-21.2,"shn":39.7,"tah":true,"kur":34.189,"yt":-2013.8,"yg":-440.2,"yz":-1573.6},{"t":"2024-11-01","net":61.1,"swap":-16.6,"shn":44.5,"tah":true,"kur":34.2236,"yt":-572.3,"yg":75.4,"yz":-647.7},{"t":"2024-11-08","net":60.6,"swap":-16.6,"shn":44,"tah":true,"kur":34.2614,"yt":711.7,"yg":15.2,"yz":696.5},{"t":"2024-11-15","net":59,"swap":-16.6,"shn":42.4,"tah":true,"kur":34.3333,"yt":2734.4,"yg":399,"yz":2335.5},{"t":"2024-11-22","net":60.9,"swap":-16.6,"shn":44.2,"tah":true,"kur":34.4642,"yt":-2320.1,"yg":-218.1,"yz":-2102},{"t":"2024-11-29","net":64.2,"swap":-16.6,"shn":47.5,"tah":true,"kur":34.5794,"yt":16.7,"yg":-185.6,"yz":202.3},{"t":"2024-12-06","net":65,"swap":-18.4,"shn":46.6,"tah":true,"kur":34.7007,"yt":-2520.1,"yg":-321.2,"yz":-2198.9},{"t":"2024-12-13","net":65.4,"swap":-18.4,"shn":47,"tah":true,"kur":34.8621,"yt":1043.8,"yg":-551.4,"yz":1595.2},{"t":"2024-12-20","net":61.7,"swap":-18.4,"shn":43.3,"tah":true,"kur":35.0619,"yt":-5.5,"yg":-2.7,"yz":-2.8},{"t":"2024-12-27","net":63.7,"swap":-18.4,"shn":45.3,"tah":true,"kur":35.1368,"yt":384.9,"yg":110,"yz":274.9},{"t":"2025-01-03","net":67.6,"swap":-20.8,"shn":46.9,"tah":true,"kur":35.271,"yt":117,"yg":160.9,"yz":-43.9},{"t":"2025-01-10","net":69.9,"swap":-20.8,"shn":49.1,"tah":true,"kur":35.3356,"yt":-955.7,"yg":-253.8,"yz":-701.9},{"t":"2025-01-17","net":71.4,"swap":-20.8,"shn":50.7,"tah":true,"kur":35.4119,"yt":583.1,"yg":-225.2,"yz":808.3},{"t":"2025-01-24","net":73.7,"swap":-20.8,"shn":52.9,"tah":true,"kur":35.5994,"yt":728,"yg":20.2,"yz":707.8},{"t":"2025-01-31","net":71.6,"swap":-20.8,"shn":50.9,"tah":true,"kur":35.763,"yt":-1238,"yg":-92.4,"yz":-1145.6},{"t":"2025-02-07","net":72.2,"swap":-6.4,"shn":65.8,"tah":true,"kur":35.9055,"yt":3171.2,"yg":980.6,"yz":2190.7},{"t":"2025-02-14","net":78,"swap":-6.4,"shn":71.6,"tah":true,"kur":36.106,"yt":271.4,"yg":-65.5,"yz":336.9},{"t":"2025-02-21","net":71.9,"swap":-6.4,"shn":65.5,"tah":true,"kur":36.306,"yt":3585.4,"yg":910.2,"yz":2675.2},{"t":"2025-02-28","net":68.4,"swap":-6.4,"shn":62,"tah":true,"kur":36.3812,"yt":-1339.9,"yg":-4.9,"yz":-1335},{"t":"2025-03-07","net":74.4,"swap":-7.6,"shn":66.8,"tah":true,"kur":36.3153,"yt":2494.2,"yg":284.9,"yz":2209.3},{"t":"2025-03-14","net":73.9,"swap":-7.6,"shn":66.3,"tah":true,"kur":36.535,"yt":673.2,"yg":-41.2,"yz":714.5},{"t":"2025-03-21","net":62.2,"swap":-7.6,"shn":54.6,"tah":true,"kur":37.8502,"yt":5862.3,"yg":2653.5,"yz":3208.8},{"t":"2025-03-28","net":56.3,"swap":-7.6,"shn":48.8,"tah":true,"kur":37.7656,"yt":-383.3,"yg":337.9,"yz":-721.2},{"t":"2025-04-04","net":48.7,"swap":-18.1,"shn":30.6,"tah":true,"kur":37.8465,"yt":3306.6,"yg":502.8,"yz":2803.7},{"t":"2025-04-11","net":38.8,"swap":-18.1,"shn":20.7,"tah":true,"kur":37.9073,"yt":-2432.7,"yg":22.7,"yz":-2455.4},{"t":"2025-04-18","net":38.7,"swap":-18.1,"shn":20.6,"tah":true,"kur":38.0032,"yt":2429.5,"yg":293.2,"yz":2136.3},{"t":"2025-04-25","net":35,"swap":-18.1,"shn":16.9,"tah":true,"kur":38.2455,"yt":-147.3,"yg":-81.9,"yz":-65.4},{"t":"2025-05-02","net":32.8,"swap":-18.8,"shn":14,"tah":true,"kur":38.3695,"yt":-824.7,"yg":-119.3,"yz":-705.4},{"t":"2025-05-09","net":37.6,"swap":-18.8,"shn":18.7,"tah":true,"kur":38.5725,"yt":-710.7,"yg":-496.8,"yz":-213.9},{"t":"2025-05-16","net":40,"swap":-18.8,"shn":21.2,"tah":true,"kur":38.5944,"yt":864.7,"yg":-86.6,"yz":951.3},{"t":"2025-05-23","net":47.9,"swap":-18.8,"shn":29.1,"tah":true,"kur":38.8174,"yt":-1342.1,"yg":-227.1,"yz":-1115},{"t":"2025-05-30","net":49.3,"swap":-18.8,"shn":30.5,"tah":true,"kur":39.0626,"yt":-523.4,"yg":-496.2,"yz":-27.2},{"t":"2025-06-06","net":52.2,"swap":-19.3,"shn":32.9,"tah":true,"kur":39.0575,"yt":-2594.8,"yg":-318,"yz":-2276.8},{"t":"2025-06-13","net":54.7,"swap":-19.3,"shn":35.5,"tah":true,"kur":39.2546,"yt":2937.1,"yg":129.7,"yz":2807.4},{"t":"2025-06-20","net":48.1,"swap":-19.3,"shn":28.8,"tah":true,"kur":39.541,"yt":-477,"yg":50.3,"yz":-527.3},{"t":"2025-06-27","net":46.3,"swap":-19.3,"shn":27,"tah":true,"kur":39.7424,"yt":677.2,"yg":-50.8,"yz":727.9},{"t":"2025-07-04","net":57.5,"swap":-17.9,"shn":39.5,"tah":true,"kur":39.6792,"yt":-4070.1,"yg":-463.7,"yz":-3606.4},{"t":"2025-07-11","net":59.7,"swap":-17.9,"shn":41.8,"tah":true,"kur":40.0076,"yt":1358.3,"yg":-127.6,"yz":1485.9},{"t":"2025-07-18","net":62.8,"swap":-17.9,"shn":44.8,"tah":true,"kur":40.2282,"yt":1990.9,"yg":112.5,"yz":1878.4},{"t":"2025-07-25","net":64.4,"swap":-17.9,"shn":46.5,"tah":true,"kur":40.399,"yt":1213.8,"yg":83.1,"yz":1130.8},{"t":"2025-08-01","net":63.2,"swap":-17.8,"shn":45.4,"tah":true,"kur":40.519,"yt":-1825.5,"yg":-0.9,"yz":-1824.5},{"t":"2025-08-08","net":67.6,"swap":-17.8,"shn":49.8,"tah":true,"kur":40.5543,"yt":1534.4,"yg":242.3,"yz":1292},{"t":"2025-08-15","net":70,"swap":-17.8,"shn":52.2,"tah":true,"kur":40.7313,"yt":-826.3,"yg":-427.5,"yz":-398.9},{"t":"2025-08-22","net":71.8,"swap":-17.8,"shn":54,"tah":true,"kur":40.8507,"yt":2015.3,"yg":-76.6,"yz":2091.9},{"t":"2025-08-29","net":73.7,"swap":-17.8,"shn":55.9,"tah":true,"kur":40.9441,"yt":-4049.3,"yg":205.4,"yz":-4254.8},{"t":"2025-09-05","net":71.2,"swap":-16.9,"shn":54.3,"tah":true,"kur":41.097,"yt":2833.7,"yg":940.6,"yz":1893.1},{"t":"2025-09-12","net":69.6,"swap":-16.9,"shn":52.7,"tah":true,"kur":41.209,"yt":1439,"yg":795.1,"yz":643.9},{"t":"2025-09-19","net":70.4,"swap":-16.9,"shn":53.5,"tah":true,"kur":41.2344,"yt":1217.6,"yg":-76.4,"yz":1294},{"t":"2025-09-26","net":72.7,"swap":-16.9,"shn":55.8,"tah":true,"kur":41.4179,"yt":-1338.9,"yg":-837.9,"yz":-501},{"t":"2025-10-03","net":75.3,"swap":-14.5,"shn":60.8,"tah":true,"kur":41.5226,"yt":196.2,"yg":1130.1,"yz":-933.9},{"t":"2025-10-10","net":79.2,"swap":-14.5,"shn":64.8,"tah":true,"kur":41.6388,"yt":1444.7,"yg":605.8,"yz":838.8},{"t":"2025-10-17","net":79.6,"swap":-14.5,"shn":65.1,"tah":true,"kur":41.7855,"yt":2294.2,"yg":1223.9,"yz":1070.3},{"t":"2025-10-24","net":67.9,"swap":-14.5,"shn":53.4,"tah":true,"kur":41.8427,"yt":-1284.2,"yg":-704,"yz":-580.2},{"t":"2025-10-31","net":69.3,"swap":-14.5,"shn":54.8,"tah":true,"kur":41.8922,"yt":802,"yg":717.8,"yz":84.2},{"t":"2025-11-07","net":73.2,"swap":-16.7,"shn":56.6,"tah":true,"kur":42.049,"yt":-622.2,"yg":198.7,"yz":-820.9},{"t":"2025-11-14","net":72.2,"swap":-16.7,"shn":55.5,"tah":true,"kur":42.1661,"yt":741.5,"yg":562.6,"yz":178.9},{"t":"2025-11-21","net":69.4,"swap":-16.7,"shn":52.7,"tah":true,"kur":42.2819,"yt":-240.6,"yg":227.5,"yz":-468.1},{"t":"2025-11-28","net":72.1,"swap":-16.7,"shn":55.5,"tah":true,"kur":42.3547,"yt":319.9,"yg":0.5,"yz":319.4},{"t":"2025-12-05","net":77.6,"swap":-14.5,"shn":63.1,"tah":true,"kur":42.3606,"yt":-2042.5,"yg":122.4,"yz":-2164.9},{"t":"2025-12-12","net":79.6,"swap":-14.5,"shn":65.1,"tah":true,"kur":42.5344,"yt":602.5,"yg":175.8,"yz":426.6},{"t":"2025-12-19","net":80.4,"swap":-14.5,"shn":65.9,"tah":true,"kur":42.6532,"yt":479,"yg":28.9,"yz":450.1},{"t":"2025-12-26","net":79.8,"swap":-14.5,"shn":65.3,"tah":true,"kur":42.7656,"yt":2511,"yg":1357.2,"yz":1153.8},{"t":"2026-01-02","net":76.8,"swap":-12.7,"shn":64.1,"tah":true,"kur":42.881,"yt":112.4,"yg":748.9,"yz":-636.5},{"t":"2026-01-09","net":82.9,"swap":-12.7,"shn":70.2,"tah":true,"kur":42.9863,"yt":-520.4,"yg":356.1,"yz":-876.5},{"t":"2026-01-16","net":91.1,"swap":-12.7,"shn":78.3,"tah":true,"kur":43.0883,"yt":548.2,"yg":716.3,"yz":-168.1},{"t":"2026-01-23","net":97.4,"swap":-12.7,"shn":84.7,"tah":true,"kur":43.2036,"yt":1762.8,"yg":1613.3,"yz":149.6},{"t":"2026-01-30","net":93.4,"swap":-12.7,"shn":80.6,"tah":true,"kur":43.3414,"yt":1880.9,"yg":3152.8,"yz":-1271.9},{"t":"2026-02-06","net":91.3,"swap":-10.8,"shn":80.5,"tah":true,"kur":43.4542,"yt":-113.9,"yg":-521.7,"yz":407.8},{"t":"2026-02-13","net":95.9,"swap":-10.8,"shn":85.2,"tah":true,"kur":43.5433,"yt":-1031.9,"yg":-121.9,"yz":-910},{"t":"2026-02-20","net":89.2,"swap":-10.8,"shn":78.4,"tah":true,"kur":43.6883,"yt":906.8,"yg":756.3,"yz":150.5},{"t":"2026-02-27","net":91.8,"swap":-10.8,"shn":81,"tah":true,"kur":43.8,"yt":2104.6,"yg":810.7,"yz":1293.9},{"t":"2026-03-06","net":78.8,"swap":-12.9,"shn":65.9,"tah":true,"kur":43.9055,"yt":233.2,"yg":101.3,"yz":131.9},{"t":"2026-03-13","net":69,"swap":-12.9,"shn":56.1,"tah":true,"kur":44.021,"yt":-1215,"yg":-693.6,"yz":-521.4},{"t":"2026-03-20","net":57.4,"swap":-12.9,"shn":44.5,"tah":true,"kur":44.1325,"yt":840.2,"yg":315.3,"yz":524.9},{"t":"2026-03-27","net":35.1,"swap":-12.9,"shn":22.1,"tah":true,"kur":44.2887,"yt":2216.2,"yg":1832.6,"yz":383.6},{"t":"2026-04-03","net":45.6,"swap":-20.5,"shn":25.2,"tah":true,"kur":44.4306,"yt":2785.3,"yg":237,"yz":2548.4},{"t":"2026-04-10","net":55.6,"swap":-20.5,"shn":35.1,"tah":true,"kur":44.5157,"yt":-986.8,"yg":25,"yz":-1011.8},{"t":"2026-04-17","net":58.4,"swap":-20.5,"shn":37.9,"tah":true,"kur":44.6989,"yt":1422.8,"yg":16.2,"yz":1406.7},{"t":"2026-04-24","net":54.2,"swap":-20.5,"shn":33.7,"tah":true,"kur":44.8541,"yt":-556.5,"yg":-1017.7,"yz":461.2},{"t":"2026-05-01","net":53.7,"swap":-17.4,"shn":36.3,"tah":true,"kur":44.9692,"yt":-2384.7,"yg":-388.5,"yz":-1996.1},{"t":"2026-05-08","net":55,"swap":-17.4,"shn":37.6,"tah":true,"kur":45.19,"yt":-55.8,"yg":-5.9,"yz":-49.8},{"t":"2026-05-15","net":52.1,"swap":-17.4,"shn":34.7,"tah":true,"kur":45.3877,"yt":475.8,"yg":-324.8,"yz":800.6},{"t":"2026-05-22","net":47,"swap":-17.4,"shn":29.6,"tah":true,"kur":45.5532,"yt":320.4,"yg":354.3,"yz":-33.9},{"t":"2026-05-29","net":45.8,"swap":-17.4,"shn":28.4,"tah":true,"kur":45.6312,"yt":1488,"yg":82.8,"yz":1405.2},{"t":"2026-06-05","net":46.8,"swap":-19.2,"shn":27.6,"tah":true,"kur":45.9084,"yt":-1659.3,"yg":-476.3,"yz":-1183},{"t":"2026-06-12","net":45.1,"swap":-19.2,"shn":25.8,"tah":true,"kur":46.0857,"yt":205,"yg":-560.5,"yz":765.4},{"t":"2026-06-19","net":52,"swap":-19.2,"shn":32.8,"tah":true,"kur":46.2724,"yt":1456.4,"yg":-132.7,"yz":1589.1},{"t":"2026-06-26","net":45.4,"swap":-19.2,"shn":26.2,"tah":true,"kur":46.4482,"yt":-1109.7,"yg":-790.1,"yz":-319.6},{"t":"2026-07-03","net":55,"swap":-15.9,"shn":39.2,"tah":true,"kur":46.6337,"yt":-3250.7,"yg":557.2,"yz":-3807.9},{"t":"2026-07-10","net":56.3,"swap":-15.9,"shn":40.4,"tah":true,"kur":46.8084,"yt":692.9,"yg":-652.2,"yz":1345.1},{"t":"2026-07-17","net":51.2,"swap":-15.9,"shn":35.3,"tah":true,"kur":46.9858,"yt":5259.4,"yg":-334.3,"yz":5593.6},{"t":"2026-07-24","net":51.1,"swap":-15.9,"shn":35.2,"tah":true,"kur":47.1647,"yt":2360.5,"yg":387.3,"yz":1973.2},{"t":"2026-07-31","net":54.1,"swap":-15.9,"shn":38.3,"tah":true,"kur":47.3452,"yt":-3545.7,"yg":-212.1,"yz":-3333.7},{"t":"2026-08-07","net":63,"swap":-13.3,"shn":49.6,"tah":true,"kur":47.5229,"yt":1769.5,"yg":1401.8,"yz":367.7},{"t":"2026-08-14","net":67.1,"swap":-13.3,"shn":53.7,"tah":true,"kur":47.7206,"yt":-297.3,"yg":-1056.4,"yz":759.1},{"t":"2026-08-21","net":66.9,"swap":-13.3,"shn":53.6,"tah":true,"kur":47.8799,"yt":1135.7,"yg":774.7,"yz":361},{"t":"2026-08-28","net":66.6,"swap":-13.3,"shn":53.2,"tah":true,"kur":48.0732,"yt":-2708.5,"yg":-631.6,"yz":-2076.9},{"t":"2026-09-04","net":65.6,"swap":-10.9,"shn":54.7,"tah":true,"kur":48.2326,"yt":-276.9,"yg":-168,"yz":-108.9},{"t":"2026-09-11","net":62.2,"swap":-10.9,"shn":51.3,"tah":true,"kur":48.4305,"yt":1802.4,"yg":7.5,"yz":1794.9},{"t":"2026-09-18","net":55.8,"swap":-10.9,"shn":44.9,"tah":true,"kur":48.6116,"yt":3029.9,"yg":362.3,"yz":2667.7},{"t":"2026-09-25","net":53.4,"swap":-10.9,"shn":42.4,"tah":true,"kur":48.7901,"yt":1342.3,"yg":1024.3,"yz":317.9},{"t":"2026-10-02","net":53.8,"swap":-15.9,"shn":37.8,"tah":false,"kur":48.9699,"yt":851,"yg":423.4,"yz":427.7},{"t":"2026-10-09","net":57.8,"swap":-13.5,"shn":44.2,"tah":false,"kur":49.1274,"yt":324.4,"yg":145.5,"yz":178.9},{"t":"2026-10-16","net":51.5,"swap":-12.2,"shn":39.3,"tah":false,"kur":49.3573,"yt":-847.8,"yg":-265.6,"yz":-582.3}];
+VERI.forEach(d => { d.date = new Date(d.t + "T00:00:00"); });
+
+const NS = "http://www.w3.org/2000/svg";
+const sayiFmt = {};
+function fmt(v, ondalik = 1, isaretli = false) {
+  if (v == null) return "–";
+  const k = ondalik + (isaretli ? "+" : "");
+  sayiFmt[k] ||= new Intl.NumberFormat("tr-TR", { minimumFractionDigits: ondalik, maximumFractionDigits: ondalik, signDisplay: isaretli ? "exceptZero" : "auto" });
+  return sayiFmt[k].format(v);
+}
+const tarihFmt = d => d.toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" });
+const ayFmt = new Intl.DateTimeFormat("tr-TR", { month: "short", year: "2-digit" });
+
+function el(tag, attrs, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs || {}) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function stil(e, s) { Object.assign(e.style, s); return e; }
+function metin(parent, tag, txt, cls) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  e.textContent = txt;
+  parent.appendChild(e);
+  return e;
+}
+
+function guzelOlcek(min, max, hedef = 5) {
+  if (min === max) { min -= 1; max += 1; }
+  const ham = (max - min) / hedef;
+  const us = Math.pow(10, Math.floor(Math.log10(ham)));
+  const m = ham / us;
+  const adim = (m < 1.5 ? 1 : m < 3 ? 2 : m < 7 ? 5 : 10) * us;
+  const lo = Math.floor(min / adim) * adim, hi = Math.ceil(max / adim) * adim;
+  const tikler = [];
+  for (let v = lo; v <= hi + adim / 2; v += adim) tikler.push(+v.toFixed(10));
+  return { lo, hi, tikler, adim };
+}
+
+function lejant(kap, seriler, tur) {
+  kap.replaceChildren();
+  for (const s of seriler) {
+    const sp = document.createElement("span");
+    const key = document.createElement("i");
+    key.className = tur === "kutu" ? "anahtar-kutu" : "anahtar-cizgi";
+    key.style.background = `var(${s.renk})`;
+    sp.appendChild(key);
+    sp.appendChild(document.createTextNode(s.ad));
+    kap.appendChild(sp);
+  }
+}
+
+// Ortak çerçeve: x ekseni hafta indeksi (haftalar eşit aralıklı), y ekseni değer
+function cerceve(kap, veri, yMin, yMax) {
+  kap.replaceChildren();
+  const W = Math.max(kap.clientWidth, 320), H = 300;
+  const m = { t: 12, r: 96, b: 28, l: 52 };
+  const pw = W - m.l - m.r, ph = H - m.t - m.b;
+  const o = guzelOlcek(Math.min(0, yMin), Math.max(0, yMax));
+  const band = pw / veri.length;
+  const x = i => m.l + (i + 0.5) * band;
+  const y = v => m.t + ph - (v - o.lo) / (o.hi - o.lo) * ph;
+  const svg = el("svg", { width: W, height: H, role: "img" }, kap);
+
+  const izgara = el("g", {}, svg);
+  for (const v of o.tikler) {
+    stil(el("line", { x1: m.l, x2: m.l + pw, y1: y(v), y2: y(v), "stroke-width": 1, "shape-rendering": "crispEdges" }, izgara),
+         { stroke: v === 0 ? "var(--axis)" : "var(--grid)" });
+    const t = el("text", { x: m.l - 8, y: y(v) + 4, "text-anchor": "end" }, izgara);
+    t.textContent = fmt(v, o.adim < 1 ? 1 : 0);
+    stil(t, { fill: "var(--muted)" });
+  }
+  // x tikleri: ay başları, genişliğe göre seyreltilmiş
+  const aylar = [];
+  veri.forEach((d, i) => { if (i === 0 || d.date.getMonth() !== veri[i - 1].date.getMonth()) aylar.push(i); });
+  const kapasite = Math.max(1, Math.floor(pw / 70));
+  const adimAy = [1, 2, 3, 6, 12, 24, 36].find(a => aylar.length / a <= kapasite) || 48;
+  for (const i of aylar) {
+    const d = veri[i].date;
+    const ayNo = d.getFullYear() * 12 + d.getMonth();
+    if (ayNo % adimAy !== 0 || x(i) < m.l + 16 || x(i) > m.l + pw - 16) continue;
+    const t = el("text", { x: x(i), y: H - 8, "text-anchor": "middle" }, svg);
+    t.textContent = ayFmt.format(d);
+    stil(t, { fill: "var(--muted)" });
+  }
+  return { svg, x, y, W, H, m, pw, ph, band };
+}
+
+// Fare / klavye ile hafta seçimi; ipucu kutusu
+function etkilesim(f, kap, veri, cizVurgu, ipucuDoldur, etiket) {
+  const kart = kap.parentElement, tt = kart.querySelector(".tt");
+  const vurgu = el("g", { "pointer-events": "none" }, f.svg);
+  const alan = el("rect", { x: f.m.l, y: f.m.t, width: f.pw, height: f.ph, fill: "transparent", tabindex: 0, class: "odak", "aria-label": etiket + " — haftalar arasında ok tuşlarıyla gezinin" }, f.svg);
+  let secili = -1;
+  function goster(i) {
+    secili = Math.max(0, Math.min(veri.length - 1, i));
+    vurgu.replaceChildren();
+    cizVurgu(vurgu, secili);
+    tt.replaceChildren();
+    ipucuDoldur(tt, veri[secili]);
+    tt.style.display = "block";
+    const kx = f.x(secili) + kap.offsetLeft, genislik = tt.offsetWidth;
+    tt.style.left = (kx + 14 + genislik > kart.clientWidth ? kx - 14 - genislik : kx + 14) + "px";
+    tt.style.top = (kap.offsetTop + f.m.t + 8) + "px";
+  }
+  function gizle() { secili = -1; vurgu.replaceChildren(); tt.style.display = "none"; }
+  alan.addEventListener("pointermove", e => {
+    const r = f.svg.getBoundingClientRect();
+    goster(Math.floor((e.clientX - r.left - f.m.l) / f.band));
+  });
+  alan.addEventListener("pointerleave", gizle);
+  alan.addEventListener("blur", gizle);
+  alan.addEventListener("focus", () => goster(veri.length - 1));
+  alan.addEventListener("keydown", e => {
+    const adim = { ArrowLeft: -1, ArrowRight: 1, Home: -1e9, End: 1e9 }[e.key];
+    if (adim == null) return;
+    e.preventDefault();
+    goster((secili < 0 ? veri.length - 1 : secili) + adim);
+  });
+}
+
+function ipucuSatiri(tt, renk, deger, ad) {
+  const s = metin(tt, "div", "", "satir");
+  const k = document.createElement("i");
+  k.className = "anahtar-cizgi";
+  k.style.background = `var(${renk})`;
+  s.appendChild(k);
+  metin(s, "b", deger);
+  metin(s, "span", ad);
+}
+
+// Sağ eksende tek seri: kendi ölçeği, silik çizgi; y dönüşümünü döndürür (veri yoksa null)
+function sagEksen(f, veri, sagSeri) {
+  const sagDeger = veri.map(sagSeri.deger).filter(v => v != null);
+  if (!sagDeger.length) return null;
+  const o = guzelOlcek(Math.min(...sagDeger), Math.max(...sagDeger));
+  const ySag = v => f.m.t + f.ph - (v - o.lo) / (o.hi - o.lo) * f.ph;
+  for (const v of o.tikler) {
+    const t = el("text", { x: f.m.l + f.pw + 8, y: ySag(v) + 4 }, f.svg);
+    t.textContent = fmt(v, o.adim < 1 ? 1 : 0);
+    stil(t, { fill: `var(${sagSeri.renk})`, opacity: 0.7 });
+  }
+  let yol = "", acik = false;
+  veri.forEach((d, i) => {
+    const v = sagSeri.deger(d);
+    if (v == null) { acik = false; return; }
+    yol += (acik ? "L" : "M") + f.x(i).toFixed(1) + "," + ySag(v).toFixed(1);
+    acik = true;
+  });
+  // Ana serilerin önüne geçmesin diye silik ve ince
+  stil(el("path", { d: yol, fill: "none", "stroke-width": 1.5, "stroke-linejoin": "round", "stroke-linecap": "round" }, f.svg),
+       { stroke: `var(${sagSeri.renk})`, opacity: 0.45 });
+  return ySag;
+}
+
+// sagSeri verilirse sağ eksende silik çizgi olarak eklenir
+function cizgiGrafik(kap, veri, seriler, ondalik, etiket, ekNot, sagSeri = null) {
+  const tum = veri.flatMap(d => seriler.map(s => s.deger(d))).filter(v => v != null);
+  if (!tum.length) { kap.replaceChildren(); return; }
+  const f = cerceve(kap, veri, Math.min(...tum), Math.max(...tum));
+  const sonlar = [];
+  for (const s of seriler) {
+    let yol = "", acik = false, son = null;
+    veri.forEach((d, i) => {
+      const v = s.deger(d);
+      if (v == null) { acik = false; return; }
+      yol += (acik ? "L" : "M") + f.x(i).toFixed(1) + "," + f.y(v).toFixed(1);
+      acik = true; son = i;
+    });
+    stil(el("path", { d: yol, fill: "none", "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }, f.svg),
+         { stroke: `var(${s.renk})` });
+    if (son != null) sonlar.push({ s, i: son, v: s.deger(veri[son]) });
+  }
+  const ySag = sagSeri && sagEksen(f, veri, sagSeri);
+  // Uç etiketleri: çakışırsa hiç yazma (lejant + ipucu + tablo taşır)
+  const ys = sonlar.map(e => f.y(e.v)).sort((a, b) => a - b);
+  const cakisma = ySag || ys.some((v, k) => k && v - ys[k - 1] < 14);  // sağ eksen etiketleriyle de çakışır
+  for (const e of sonlar) {
+    stil(el("circle", { cx: f.x(e.i), cy: f.y(e.v), r: 4, "stroke-width": 2 }, f.svg), { fill: `var(${e.s.renk})`, stroke: "var(--surface)" });
+    if (cakisma) continue;
+    const t = el("text", { x: f.x(e.i) + 10, y: f.y(e.v) + 4 }, f.svg);
+    t.textContent = `${e.s.kisa} ${fmt(e.v, ondalik)}`;
+    stil(t, { fill: "var(--ink-2)" });
+  }
+  etkilesim(f, kap, veri, (g, i) => {
+    stil(el("line", { x1: f.x(i), x2: f.x(i), y1: f.m.t, y2: f.m.t + f.ph, "stroke-width": 1 }, g), { stroke: "var(--axis)" });
+    for (const s of seriler) {
+      const v = s.deger(veri[i]);
+      if (v != null) stil(el("circle", { cx: f.x(i), cy: f.y(v), r: 4, "stroke-width": 2 }, g), { fill: `var(${s.renk})`, stroke: "var(--surface)" });
+    }
+    const v = ySag && sagSeri.deger(veri[i]);
+    if (v != null && ySag) stil(el("circle", { cx: f.x(i), cy: ySag(v), r: 4, "stroke-width": 2 }, g), { fill: `var(${sagSeri.renk})`, stroke: "var(--surface)" });
+  }, (tt, d) => {
+    metin(tt, "div", tarihFmt(d.date), "baslik");
+    for (const s of seriler) ipucuSatiri(tt, s.renk, fmt(s.deger(d), ondalik), s.ad);
+    if (ySag) ipucuSatiri(tt, sagSeri.renk, fmt(sagSeri.deger(d), 4), sagSeri.ad);
+    if (ekNot) { const n = ekNot(d); if (n) metin(tt, "div", n, "uyari"); }
+  }, etiket);
+}
+
+function cubukYolu(x, w, yTaban, yUc, r) {
+  const h = Math.abs(yUc - yTaban);
+  if (h < 0.5) return null;
+  r = Math.min(r, w / 2, h);
+  const yon = yUc < yTaban ? 1 : -1;  // yukarı büyüyen çubukta köşe aşağı doğru kıvrılır
+  return `M${x},${yTaban}V${yUc + yon * r}Q${x},${yUc} ${x + r},${yUc}H${x + w - r}Q${x + w},${yUc} ${x + w},${yUc + yon * r}V${yTaban}Z`;
+}
+
+// İşarete göre yığılmış çubuk: pozitifler sıfırdan yukarı, negatifler aşağı
+function yiginGrafik(kap, veri, seriler, toplamAd) {
+  let enAz = 0, enCok = 0;
+  for (const d of veri) {
+    let p = 0, n = 0;
+    for (const s of seriler) { const v = s.deger(d); if (v > 0) p += v; else if (v < 0) n += v; }
+    enCok = Math.max(enCok, p); enAz = Math.min(enAz, n);
+  }
+  const f = cerceve(kap, veri, enAz, enCok);
+  const vurguKatmani = el("g", {}, f.svg);
+  const w = Math.max(1, Math.min(24, f.band * 0.72));
+  veri.forEach((d, i) => {
+    const parcalar = { "+": [], "-": [] };
+    for (const s of seriler) {
+      const v = s.deger(d);
+      if (v) parcalar[v > 0 ? "+" : "-"].push({ s, v });
+    }
+    for (const yon of ["+", "-"]) {
+      let taban = 0;
+      parcalar[yon].forEach((p, k) => {
+        let y0 = f.y(taban), y1 = f.y(taban + p.v);
+        taban += p.v;
+        if (k > 0) y0 += (yon === "+" ? -2 : 2);  // dilimler arasında 2px yüzey boşluğu
+        if ((yon === "+" && y1 >= y0) || (yon === "-" && y1 <= y0)) return;
+        const enDis = k === parcalar[yon].length - 1;
+        const yol = enDis ? cubukYolu(f.x(i) - w / 2, w, y0, y1, w >= 6 ? 4 : 1)
+                          : `M${f.x(i) - w / 2},${y0}V${y1}H${f.x(i) + w / 2}V${y0}Z`;
+        if (yol) stil(el("path", { d: yol }, f.svg), { fill: `var(${p.s.renk})` });
+      });
+    }
+  });
+  etkilesim(f, kap, veri, (g, i) => {
+    vurguKatmani.replaceChildren();
+    stil(el("rect", { x: f.x(i) - f.band / 2, y: f.m.t, width: f.band, height: f.ph }, vurguKatmani), { fill: "var(--grid)", opacity: 0.6 });
+  }, (tt, d) => {
+    metin(tt, "div", tarihFmt(d.date), "baslik");
+    const toplam = seriler.reduce((a, s) => s.deger(d) == null ? a : (a ?? 0) + s.deger(d), null);
+    ipucuSatiri(tt, "--s-toplam", fmt(toplam, 0, true), toplamAd);
+    for (const s of seriler) ipucuSatiri(tt, s.renk, fmt(s.deger(d), 0, true), s.ad);
+  }, "Haftalık döviz talebi");
+  f.svg.addEventListener("pointerleave", () => vurguKatmani.replaceChildren());
+}
+
+function kutucuklar(kap, veri) {
+  kap.replaceChildren();
+  const son = veri[veri.length - 1];
+  const yp = veri.filter(d => d.yt != null);
+  const topla = k => yp.reduce((a, d) => a + (d[k] || 0), 0) / 1000;
+  const kutular = [
+    ["Net rezervler", fmt(son.net), `milyar USD · ${tarihFmt(son.date)}`],
+    ["Swap hariç net rezervler", fmt(son.shn), `milyar USD · ${tarihFmt(son.date)}${son.tah ? " · swap tahmini" : ""}`],
+    ["Dönem içi döviz talebi", fmt(topla("yt"), 1, true),
+     `milyar USD · gerçek ${fmt(topla("yg"), 1, true)}, tüzel ${fmt(topla("yz"), 1, true)}`],
+  ];
+  for (const [etiket, deger, not] of kutular) {
+    const k = metin(kap, "div", "", "kutu");
+    metin(k, "div", etiket, "etiket");
+    metin(k, "div", deger, "deger");
+    metin(k, "div", not, "not");
+  }
+}
+
+function tablo(tbl, veri) {
+  tbl.replaceChildren();
+  const bas = ["Tarih", "Net rezerv", "Swap", "Swap hariç net", "USD/TL", "YP talebi toplam", "Gerçek kişiler", "Tüzel kişiler"];
+  const tr = document.createElement("tr");
+  bas.forEach(b => metin(tr, "th", b));
+  metin(tbl, "thead", "").appendChild(tr);
+  const govde = metin(tbl, "tbody", "");
+  for (const d of [...veri].reverse()) {
+    const r = metin(govde, "tr", "");
+    metin(r, "td", tarihFmt(d.date));
+    metin(r, "td", fmt(d.net));
+    const sw = metin(r, "td", fmt(d.swap) + (d.tah ? " *" : ""));
+    if (d.tah) { sw.className = "tahmini"; sw.title = "Tahmini: bir önceki ay sonunun aylık değeri"; }
+    metin(r, "td", fmt(d.shn));
+    metin(r, "td", fmt(d.kur, 4));
+    for (const k of ["yt", "yg", "yz"]) metin(r, "td", fmt(d[k], 1, true));
+  }
+}
+
+const REZERV = [
+  { ad: "Net rezervler", kisa: "Net", renk: "--s-net", deger: d => d.net },
+  { ad: "Swaplar", kisa: "Swap", renk: "--s-swap", deger: d => d.swap },
+  { ad: "Swap hariç net rezervler", kisa: "Swap hariç", renk: "--s-shn", deger: d => d.shn },
+];
+const KUR_SAG = { ad: "USD/TL kuru (sağ eksen)", renk: "--s-kur", deger: d => d.kur };
+const HAFTALIK = [
+  { ad: "Gerçek kişiler", renk: "--s-gercek", deger: d => d.yg },
+  { ad: "Tüzel kişiler", renk: "--s-tuzel", deger: d => d.yz },
+];
+
+let ayFiltresi = 24;
+function ciz() {
+  const sonTarih = VERI[VERI.length - 1].date;
+  let veri = VERI;
+  if (ayFiltresi) {
+    const bas = new Date(sonTarih); bas.setMonth(bas.getMonth() - ayFiltresi);
+    veri = VERI.filter(d => d.date > bas);
+  }
+  document.getElementById("altbaslik").textContent =
+    `Haftalık · ${tarihFmt(veri[0].date)} – ${tarihFmt(sonTarih)} (${veri.length} hafta) · Kaynak: TCMB, EVDS`;
+  const tahSay = veri.filter(d => d.tah).length;
+  document.getElementById("aciklama-rezerv").textContent =
+    `milyar ABD doları · tahmini swap (bir önceki ay sonunun aylık IRFCL değeri): ${tahSay} / ${veri.length} hafta`;
+
+  kutucuklar(document.getElementById("kutucuklar"), veri);
+  lejant(document.getElementById("lejant-rezerv"), REZERV, "cizgi");
+  cizgiGrafik(document.getElementById("g-rezerv"), veri, REZERV, 1, "Net rezervler ve swaplar",
+              d => d.tah ? "Swap tahmini (aylık değer)" : "Swap haftalık veri");
+
+  // Kümülatif: dönem başından itibaren (milyar USD)
+  let kt = null, kg = null, kz = null;
+  const kum = veri.map(d => {
+    if (d.yt != null) { kt = (kt ?? 0) + d.yt / 1000; kg = (kg ?? 0) + (d.yg || 0) / 1000; kz = (kz ?? 0) + (d.yz || 0) / 1000; }
+    return { date: d.date, kt, kg, kz, kur: d.kur };
+  });
+  const KUM = [
+    { ad: "Toplam", kisa: "Toplam", renk: "--s-toplam", deger: d => d.kt },
+    { ad: "Gerçek kişiler", kisa: "Gerçek", renk: "--s-gercek", deger: d => d.kg },
+    { ad: "Tüzel kişiler", kisa: "Tüzel", renk: "--s-tuzel", deger: d => d.kz },
+  ];
+  lejant(document.getElementById("lejant-kumulatif"), [...KUM, KUR_SAG], "cizgi");
+  cizgiGrafik(document.getElementById("g-kumulatif"), kum, KUM, 1, "Kümülatif döviz talebi ve USD/TL kuru", null, KUR_SAG);
+
+  lejant(document.getElementById("lejant-haftalik"), HAFTALIK, "kutu");
+  yiginGrafik(document.getElementById("g-haftalik"), veri, HAFTALIK, "Toplam");
+
+  tablo(document.getElementById("tablo"), veri);
+}
+
+document.querySelectorAll(".filtre button").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll(".filtre button").forEach(x => x.setAttribute("aria-pressed", x === b));
+  ayFiltresi = +b.dataset.ay;
+  ciz();
+}));
+let zamanlayici;
+new ResizeObserver(() => { clearTimeout(zamanlayici); zamanlayici = setTimeout(ciz, 80); }).observe(document.querySelector(".wrap"));
+ciz();
+</script>
+</body>
+</html>
