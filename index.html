@@ -41,7 +41,8 @@ body { margin: 0; }
 .wrap { max-width: 1120px; margin: 0 auto; }
 h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
 .alt { color: var(--ink-2); margin: 0 0 20px; }
-.filtre { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+.filtre { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.filtre + .filtre { margin-bottom: 16px; }
 .filtre button {
   font: inherit; color: var(--ink-2); background: var(--surface); cursor: pointer;
   border: 1px solid var(--ring); border-radius: 8px; padding: 5px 12px;
@@ -56,6 +57,9 @@ h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
 .kutu .not { color: var(--muted); font-size: 12px; }
 .kart { padding: 16px 16px 8px; margin-bottom: 16px; position: relative; }
 .kart h2 { font-size: 15px; font-weight: 600; margin: 0; }
+.kart-bas { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.gorunum { margin-bottom: 0; }
+.gorunum button { padding: 3px 10px; font-size: 13px; }
 .kart .aciklama { color: var(--ink-2); font-size: 13px; margin: 2px 0 8px; }
 .lejant { display: flex; gap: 16px; flex-wrap: wrap; color: var(--ink-2); font-size: 13px; margin-bottom: 4px; }
 .lejant span { display: inline-flex; align-items: center; gap: 6px; }
@@ -84,6 +88,7 @@ th { position: sticky; top: 0; background: var(--surface); color: var(--ink-2); 
 th:first-child, td:first-child { text-align: left; }
 td.tahmini { color: var(--muted); }
 .dipnot { color: var(--muted); font-size: 12px; margin-top: 16px; }
+.cekince { border-top: 1px solid var(--grid); padding-top: 10px; margin-top: 10px; }
 </style>
 </head>
 <body>
@@ -92,10 +97,17 @@ td.tahmini { color: var(--muted); }
   <h1>TCMB rezervleri ve yurt içi yerleşiklerin döviz talebi</h1>
   <p class="alt" id="altbaslik"></p>
 
-  <div class="filtre" role="group" aria-label="Dönem">
-    <button data-ay="6">Son 6 ay</button>
+  <div class="filtre" role="group" aria-label="Dönem – hafta">
+    <button data-hafta="1">Son 1 hafta</button>
+    <button data-hafta="2">Son 2 hafta</button>
+    <button data-hafta="3">Son 3 hafta</button>
+    <button data-hafta="4">Son 4 hafta</button>
+  </div>
+  <div class="filtre" role="group" aria-label="Dönem – ay">
+    <button data-ay="3">Son 3 ay</button>
+    <button data-ay="6" aria-pressed="true">Son 6 ay</button>
     <button data-ay="12">Son 1 yıl</button>
-    <button data-ay="24" aria-pressed="true">Son 2 yıl</button>
+    <button data-ay="24">Son 2 yıl</button>
     <button data-ay="60">Son 5 yıl</button>
     <button data-ay="0">Tümü</button>
   </div>
@@ -103,7 +115,13 @@ td.tahmini { color: var(--muted); }
   <div class="kutucuklar" id="kutucuklar"></div>
 
   <section class="kart">
-    <h2>Net rezervler, swaplar ve swap hariç net rezervler</h2>
+    <div class="kart-bas">
+      <h2>Net rezervler, swaplar ve swap hariç net rezervler</h2>
+      <div class="filtre gorunum" role="group" aria-label="Rezerv grafiği görünümü">
+        <button data-gorunum="seviye">Seviye</button>
+        <button data-gorunum="degisim">Değişim</button>
+      </div>
+    </div>
     <p class="aciklama" id="aciklama-rezerv"></p>
     <div class="lejant" id="lejant-rezerv"></div>
     <div id="g-rezerv"></div>
@@ -135,7 +153,14 @@ td.tahmini { color: var(--muted); }
     Kaynak: TCMB Uluslararası Rezervler ve Döviz Likiditesi, EVDS (Merkez Bankası Rezervleri, Stand By bilançosu 2A,
     Yabancı Para Mevduatta Haftalık Değişim ve Parite Etkisi). Yöntem: Mahfi Eğilmez, "Rezervleri Hesaplama Rehberi" (2025).
     Swap = II.2 + II.3; haftalık verisi olmayan haftalarda bir önceki ay sonunun aylık IRFCL değeri (tahmini).
-    Oluşturma: 06.11.2026 17:45 · tcmb_rezervler.py / rezerv_grafik.py
+    Oluşturma: 07.11.2026 14:19 · tcmb_rezervler.py / rezerv_grafik.py
+  </p>
+
+  <p class="dipnot cekince">
+    <strong>Çekince:</strong> Bu sayfa yalnızca bilgilendirme amaçlıdır, yatırım tavsiyesi değildir.
+    Veriler TCMB ve EVDS kaynaklarından otomatik derlenmiştir; hata, eksik ya da revizyon içerebilir —
+    bazı haftaların swap değeri tahminidir. Resmi ve bağlayıcı kaynak TCMB yayınlarıdır. Burada yer alan
+    bilgilere dayanarak alınan kararların sonuçlarından sayfa sahibi sorumlu tutulamaz.
   </p>
 </div>
 </div>
@@ -155,6 +180,7 @@ function fmt(v, ondalik = 1, isaretli = false) {
 }
 const tarihFmt = d => d.toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" });
 const ayFmt = new Intl.DateTimeFormat("tr-TR", { month: "short", year: "2-digit" });
+const gunFmt = new Intl.DateTimeFormat("tr-TR", { day: "2-digit", month: "short" });
 
 function el(tag, attrs, parent) {
   const e = document.createElementNS(NS, tag);
@@ -197,12 +223,12 @@ function lejant(kap, seriler, tur) {
 }
 
 // Ortak çerçeve: x ekseni hafta indeksi (haftalar eşit aralıklı), y ekseni değer
-function cerceve(kap, veri, yMin, yMax) {
+function cerceve(kap, veri, yMin, yMax, sifirDahil = true) {
   kap.replaceChildren();
   const W = Math.max(kap.clientWidth, 320), H = 300;
   const m = { t: 12, r: 96, b: 28, l: 52 };
   const pw = W - m.l - m.r, ph = H - m.t - m.b;
-  const o = guzelOlcek(Math.min(0, yMin), Math.max(0, yMax));
+  const o = guzelOlcek(sifirDahil ? Math.min(0, yMin) : yMin, sifirDahil ? Math.max(0, yMax) : yMax);
   const band = pw / veri.length;
   const x = i => m.l + (i + 0.5) * band;
   const y = v => m.t + ph - (v - o.lo) / (o.hi - o.lo) * ph;
@@ -216,18 +242,26 @@ function cerceve(kap, veri, yMin, yMax) {
     t.textContent = fmt(v, o.adim < 1 ? 1 : 0);
     stil(t, { fill: "var(--muted)" });
   }
-  // x tikleri: ay başları, genişliğe göre seyreltilmiş
-  const aylar = [];
-  veri.forEach((d, i) => { if (i === 0 || d.date.getMonth() !== veri[i - 1].date.getMonth()) aylar.push(i); });
+  // x tikleri: kısa dönemde her hafta gün.ay (en güncel hafta her zaman etiketli),
+  // uzun dönemde ay başları; ikisi de genişliğe göre seyreltilmiş
   const kapasite = Math.max(1, Math.floor(pw / 70));
-  const adimAy = [1, 2, 3, 6, 12, 24, 36].find(a => aylar.length / a <= kapasite) || 48;
-  for (const i of aylar) {
-    const d = veri[i].date;
-    const ayNo = d.getFullYear() * 12 + d.getMonth();
-    if (ayNo % adimAy !== 0 || x(i) < m.l + 16 || x(i) > m.l + pw - 16) continue;
+  const etiketYaz = (i, txt) => {
+    if (x(i) < m.l + 16 || x(i) > m.l + pw - 16) return;
     const t = el("text", { x: x(i), y: H - 8, "text-anchor": "middle" }, svg);
-    t.textContent = ayFmt.format(d);
+    t.textContent = txt;
     stil(t, { fill: "var(--muted)" });
+  };
+  if (veri.length <= 15) {
+    const atla = Math.ceil(veri.length / kapasite);
+    for (let i = veri.length - 1; i >= 0; i -= atla) etiketYaz(i, gunFmt.format(veri[i].date));
+  } else {
+    const aylar = [];
+    veri.forEach((d, i) => { if (i === 0 || d.date.getMonth() !== veri[i - 1].date.getMonth()) aylar.push(i); });
+    const adimAy = [1, 2, 3, 6, 12, 24, 36].find(a => aylar.length / a <= kapasite) || 48;
+    for (const i of aylar) {
+      const d = veri[i].date;
+      if ((d.getFullYear() * 12 + d.getMonth()) % adimAy === 0) etiketYaz(i, ayFmt.format(d));
+    }
   }
   return { svg, x, y, W, H, m, pw, ph, band };
 }
@@ -299,11 +333,14 @@ function sagEksen(f, veri, sagSeri) {
   return ySag;
 }
 
-// sagSeri verilirse sağ eksende silik çizgi olarak eklenir
-function cizgiGrafik(kap, veri, seriler, ondalik, etiket, ekNot, sagSeri = null) {
+// secenek.sagSeri verilirse sağ eksende silik çizgi olarak eklenir;
+// secenek.sifirDahil false ise y ekseni 0 yerine veri aralığına göre ölçeklenir;
+// secenek.isaretli true ise değerler + / - işaretiyle yazılır (değişim grafiği)
+function cizgiGrafik(kap, veri, seriler, ondalik, etiket, ekNot, secenek = {}) {
+  const { sagSeri = null, sifirDahil = true, isaretli = false } = secenek;
   const tum = veri.flatMap(d => seriler.map(s => s.deger(d))).filter(v => v != null);
   if (!tum.length) { kap.replaceChildren(); return; }
-  const f = cerceve(kap, veri, Math.min(...tum), Math.max(...tum));
+  const f = cerceve(kap, veri, Math.min(...tum), Math.max(...tum), sifirDahil);
   const sonlar = [];
   for (const s of seriler) {
     let yol = "", acik = false, son = null;
@@ -325,7 +362,7 @@ function cizgiGrafik(kap, veri, seriler, ondalik, etiket, ekNot, sagSeri = null)
     stil(el("circle", { cx: f.x(e.i), cy: f.y(e.v), r: 4, "stroke-width": 2 }, f.svg), { fill: `var(${e.s.renk})`, stroke: "var(--surface)" });
     if (cakisma) continue;
     const t = el("text", { x: f.x(e.i) + 10, y: f.y(e.v) + 4 }, f.svg);
-    t.textContent = `${e.s.kisa} ${fmt(e.v, ondalik)}`;
+    t.textContent = `${e.s.kisa} ${fmt(e.v, ondalik, isaretli)}`;
     stil(t, { fill: "var(--ink-2)" });
   }
   etkilesim(f, kap, veri, (g, i) => {
@@ -338,7 +375,7 @@ function cizgiGrafik(kap, veri, seriler, ondalik, etiket, ekNot, sagSeri = null)
     if (v != null && ySag) stil(el("circle", { cx: f.x(i), cy: ySag(v), r: 4, "stroke-width": 2 }, g), { fill: `var(${sagSeri.renk})`, stroke: "var(--surface)" });
   }, (tt, d) => {
     metin(tt, "div", tarihFmt(d.date), "baslik");
-    for (const s of seriler) ipucuSatiri(tt, s.renk, fmt(s.deger(d), ondalik), s.ad);
+    for (const s of seriler) ipucuSatiri(tt, s.renk, fmt(s.deger(d), ondalik, isaretli), s.ad);
     if (ySag) ipucuSatiri(tt, sagSeri.renk, fmt(sagSeri.deger(d), 4), sagSeri.ad);
     if (ekNot) { const n = ekNot(d); if (n) metin(tt, "div", n, "uyari"); }
   }, etiket);
@@ -362,7 +399,7 @@ function yiginGrafik(kap, veri, seriler, toplamAd) {
   }
   const f = cerceve(kap, veri, enAz, enCok);
   const vurguKatmani = el("g", {}, f.svg);
-  const w = Math.max(1, Math.min(24, f.band * 0.72));
+  const w = Math.max(1, Math.min(48, f.band * 0.72));
   veri.forEach((d, i) => {
     const parcalar = { "+": [], "-": [] };
     for (const s of seriler) {
@@ -385,7 +422,8 @@ function yiginGrafik(kap, veri, seriler, toplamAd) {
   });
   etkilesim(f, kap, veri, (g, i) => {
     vurguKatmani.replaceChildren();
-    stil(el("rect", { x: f.x(i) - f.band / 2, y: f.m.t, width: f.band, height: f.ph }, vurguKatmani), { fill: "var(--grid)", opacity: 0.6 });
+    const vg = Math.min(f.band, 64);  // az hafta varken vurgu grafiğin yarısını kaplamasın
+    stil(el("rect", { x: f.x(i) - vg / 2, y: f.m.t, width: vg, height: f.ph }, vurguKatmani), { fill: "var(--grid)", opacity: 0.6 });
   }, (tt, d) => {
     metin(tt, "div", tarihFmt(d.date), "baslik");
     const toplam = seriler.reduce((a, s) => s.deger(d) == null ? a : (a ?? 0) + s.deger(d), null);
@@ -444,24 +482,48 @@ const HAFTALIK = [
   { ad: "Tüzel kişiler", renk: "--s-tuzel", deger: d => d.yz },
 ];
 
-let ayFiltresi = 24;
+let donem = { ay: 6 };      // varsayılan: son 6 ay
+let rezervGorunum = null;   // null: dönemden türet (hafta -> değişim), aksi halde kullanıcı seçimi
+// Hafta seçiminde N haftalık değişimi göstermek için N+1 gözlem alınır (başlangıç seviyesi dahil)
+function donemVerisi() {
+  if (donem.hafta) return VERI.slice(-(donem.hafta + 1));
+  if (!donem.ay) return VERI;
+  const bas = new Date(VERI[VERI.length - 1].date);
+  bas.setMonth(bas.getMonth() - donem.ay);
+  return VERI.filter(d => d.date > bas);
+}
 function ciz() {
   const sonTarih = VERI[VERI.length - 1].date;
-  let veri = VERI;
-  if (ayFiltresi) {
-    const bas = new Date(sonTarih); bas.setMonth(bas.getMonth() - ayFiltresi);
-    veri = VERI.filter(d => d.date > bas);
-  }
+  const veri = donemVerisi();
   document.getElementById("altbaslik").textContent =
     `Haftalık · ${tarihFmt(veri[0].date)} – ${tarihFmt(sonTarih)} (${veri.length} hafta) · Kaynak: TCMB, EVDS`;
   const tahSay = veri.filter(d => d.tah).length;
-  document.getElementById("aciklama-rezerv").textContent =
-    `milyar ABD doları · tahmini swap (bir önceki ay sonunun aylık IRFCL değeri): ${tahSay} / ${veri.length} hafta`;
+  const swapNotu = `tahmini swap (bir önceki ay sonunun aylık IRFCL değeri): ${tahSay} / ${veri.length} hafta`;
+  const tahNot = d => d.tah ? "Swap tahmini (aylık değer)" : "Swap haftalık veri";
 
   kutucuklar(document.getElementById("kutucuklar"), veri);
   lejant(document.getElementById("lejant-rezerv"), REZERV, "cizgi");
-  cizgiGrafik(document.getElementById("g-rezerv"), veri, REZERV, 1, "Net rezervler ve swaplar",
-              d => d.tah ? "Swap tahmini (aylık değer)" : "Swap haftalık veri");
+  const gorunum = rezervGorunum ?? (donem.hafta ? "degisim" : "seviye");
+  document.querySelectorAll("[data-gorunum]").forEach(b => b.setAttribute("aria-pressed", b.dataset.gorunum === gorunum));
+  if (gorunum === "degisim") {
+    // Dönem başına göre değişim: ilk haftanın değeri sıfır kabul edilir
+    const ilk = {};
+    for (const k of ["net", "swap", "shn"]) ilk[k] = veri.find(d => d[k] != null)?.[k];
+    const fark = veri.map(d => {
+      const f = { date: d.date, tah: d.tah };
+      for (const k of ["net", "swap", "shn"]) f[k] = d[k] == null || ilk[k] == null ? null : +(d[k] - ilk[k]).toFixed(2);
+      return f;
+    });
+    document.getElementById("aciklama-rezerv").textContent =
+      `milyar ABD doları · ${tarihFmt(veri[0].date)} tarihine göre değişim · ${swapNotu}`;
+    cizgiGrafik(document.getElementById("g-rezerv"), fark, REZERV, 1, "Rezervlerde dönem başına göre değişim",
+                tahNot, { isaretli: true });
+  } else {
+    document.getElementById("aciklama-rezerv").textContent = `milyar ABD doları · ${swapNotu}`;
+    // Hafta seçimlerinde 1-2 milyar dolarlık hareket görünsün diye y ekseni veri aralığına göre ölçeklenir
+    cizgiGrafik(document.getElementById("g-rezerv"), veri, REZERV, 1, "Net rezervler ve swaplar",
+                tahNot, { sifirDahil: !donem.hafta });
+  }
 
   // Kümülatif: dönem başından itibaren (milyar USD)
   let kt = null, kg = null, kz = null;
@@ -475,7 +537,7 @@ function ciz() {
     { ad: "Tüzel kişiler", kisa: "Tüzel", renk: "--s-tuzel", deger: d => d.kz },
   ];
   lejant(document.getElementById("lejant-kumulatif"), [...KUM, KUR_SAG], "cizgi");
-  cizgiGrafik(document.getElementById("g-kumulatif"), kum, KUM, 1, "Kümülatif döviz talebi ve USD/TL kuru", null, KUR_SAG);
+  cizgiGrafik(document.getElementById("g-kumulatif"), kum, KUM, 1, "Kümülatif döviz talebi ve USD/TL kuru", null, { sagSeri: KUR_SAG });
 
   lejant(document.getElementById("lejant-haftalik"), HAFTALIK, "kutu");
   yiginGrafik(document.getElementById("g-haftalik"), veri, HAFTALIK, "Toplam");
@@ -483,9 +545,15 @@ function ciz() {
   tablo(document.getElementById("tablo"), veri);
 }
 
-document.querySelectorAll(".filtre button").forEach(b => b.addEventListener("click", () => {
-  document.querySelectorAll(".filtre button").forEach(x => x.setAttribute("aria-pressed", x === b));
-  ayFiltresi = +b.dataset.ay;
+const donemDugmeleri = document.querySelectorAll("[data-hafta], [data-ay]");
+donemDugmeleri.forEach(b => b.addEventListener("click", () => {
+  donemDugmeleri.forEach(x => x.setAttribute("aria-pressed", x === b));
+  donem = b.dataset.hafta ? { hafta: +b.dataset.hafta } : { ay: +b.dataset.ay };
+  rezervGorunum = null;  // dönem değişince görünüm yeniden dönemden türetilir
+  ciz();
+}));
+document.querySelectorAll("[data-gorunum]").forEach(b => b.addEventListener("click", () => {
+  rezervGorunum = b.dataset.gorunum;
   ciz();
 }));
 let zamanlayici;
