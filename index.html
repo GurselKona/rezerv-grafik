@@ -153,7 +153,7 @@ td.tahmini { color: var(--muted); }
     Kaynak: TCMB Uluslararası Rezervler ve Döviz Likiditesi, EVDS (Merkez Bankası Rezervleri, Stand By bilançosu 2A,
     Yabancı Para Mevduatta Haftalık Değişim ve Parite Etkisi). Yöntem: Mahfi Eğilmez, "Rezervleri Hesaplama Rehberi" (2025).
     Swap = II.2 + II.3; haftalık verisi olmayan haftalarda bir önceki ay sonunun aylık IRFCL değeri (tahmini).
-    Oluşturma: 07.11.2026 14:19 · tcmb_rezervler.py / rezerv_grafik.py
+    Oluşturma: 08.11.2026 15:33 · tcmb_rezervler.py / rezerv_grafik.py
   </p>
 
   <p class="dipnot cekince">
@@ -433,6 +433,44 @@ function yiginGrafik(kap, veri, seriler, toplamAd) {
   f.svg.addEventListener("pointerleave", () => vurguKatmani.replaceChildren());
 }
 
+// Yan yana (gruplu) çubuk: her haftada serilerin çubukları sıfırdan yukarı / aşağı uzanır
+function grupluGrafik(kap, veri, seriler, ondalik, etiket, ekNot) {
+  const tum = veri.flatMap(d => seriler.map(s => s.deger(d))).filter(v => v != null);
+  if (!tum.length) { kap.replaceChildren(); return; }
+  const f = cerceve(kap, veri, Math.min(...tum), Math.max(...tum));
+  const vurguKatmani = el("g", {}, f.svg);
+  const n = seriler.length;
+  const grup = Math.min(f.band * 0.8, 40 * n);
+  const bosluk = grup / n >= 6 ? 2 : 0;  // çubuklar arasında 2px yüzey boşluğu (yer varsa)
+  const w = Math.max(0.5, (grup - bosluk * (n - 1)) / n);
+  const etiketli = w >= 30;              // az hafta varken değerler çubuğun ucuna yazılır
+  veri.forEach((d, i) => {
+    const sol = f.x(i) - grup / 2;
+    seriler.forEach((s, k) => {
+      const v = s.deger(d);
+      if (v == null) return;
+      const bx = sol + k * (w + bosluk);
+      const yol = cubukYolu(bx, w, f.y(0), f.y(v), w >= 6 ? 4 : 0);
+      if (yol) stil(el("path", { d: yol }, f.svg), { fill: `var(${s.renk})` });
+      if (etiketli) {
+        const t = el("text", { x: bx + w / 2, y: v >= 0 ? f.y(v) - 6 : f.y(v) + 16, "text-anchor": "middle" }, f.svg);
+        t.textContent = fmt(v, ondalik, true);
+        stil(t, { fill: "var(--ink-2)" });
+      }
+    });
+  });
+  etkilesim(f, kap, veri, (g, i) => {
+    vurguKatmani.replaceChildren();
+    const vg = Math.min(f.band, grup + 16);
+    stil(el("rect", { x: f.x(i) - vg / 2, y: f.m.t, width: vg, height: f.ph }, vurguKatmani), { fill: "var(--grid)", opacity: 0.6 });
+  }, (tt, d) => {
+    metin(tt, "div", tarihFmt(d.date), "baslik");
+    for (const s of seriler) ipucuSatiri(tt, s.renk, fmt(s.deger(d), ondalik, true), s.ad);
+    if (ekNot) { const n = ekNot(d); if (n) metin(tt, "div", n, "uyari"); }
+  }, etiket);
+  f.svg.addEventListener("pointerleave", () => vurguKatmani.replaceChildren());
+}
+
 function kutucuklar(kap, veri) {
   kap.replaceChildren();
   const son = veri[veri.length - 1];
@@ -502,22 +540,28 @@ function ciz() {
   const tahNot = d => d.tah ? "Swap tahmini (aylık değer)" : "Swap haftalık veri";
 
   kutucuklar(document.getElementById("kutucuklar"), veri);
-  lejant(document.getElementById("lejant-rezerv"), REZERV, "cizgi");
-  const gorunum = rezervGorunum ?? (donem.hafta ? "degisim" : "seviye");
+  const gorunum = (rezervGorunum ?? (donem.hafta ? "degisim" : "seviye")) === "degisim" && veri.length > 1 ? "degisim" : "seviye";
   document.querySelectorAll("[data-gorunum]").forEach(b => b.setAttribute("aria-pressed", b.dataset.gorunum === gorunum));
+  lejant(document.getElementById("lejant-rezerv"), REZERV, gorunum === "degisim" ? "kutu" : "cizgi");
   if (gorunum === "degisim") {
-    // Dönem başına göre değişim: ilk haftanın değeri sıfır kabul edilir
-    const ilk = {};
-    for (const k of ["net", "swap", "shn"]) ilk[k] = veri.find(d => d[k] != null)?.[k];
-    const fark = veri.map(d => {
-      const f = { date: d.date, tah: d.tah };
-      for (const k of ["net", "swap", "shn"]) f[k] = d[k] == null || ilk[k] == null ? null : +(d[k] - ilk[k]).toFixed(2);
+    // Haftalık değişim: her hafta bir önceki haftaya göre; ilk gözlem yalnızca başlangıç seviyesidir,
+    // böylece çubukların toplamı dönem başından sona değişime eşit olur
+    const ANAHTAR = ["net", "swap", "shn"];
+    const fark = veri.slice(1).map((d, j) => {
+      const o = veri[j];
+      const f = { date: d.date, tah: d.tah || o.tah };
+      for (const k of ANAHTAR) f[k] = d[k] == null || o[k] == null ? null : +(d[k] - o[k]).toFixed(2);
       return f;
     });
+    const son = veri[veri.length - 1];
+    const toplam = REZERV.map((s, k) => {
+      const v = son[ANAHTAR[k]] == null || veri[0][ANAHTAR[k]] == null ? null : son[ANAHTAR[k]] - veri[0][ANAHTAR[k]];
+      return `${s.kisa} ${fmt(v, 1, true)}`;
+    }).join(", ");
     document.getElementById("aciklama-rezerv").textContent =
-      `milyar ABD doları · ${tarihFmt(veri[0].date)} tarihine göre değişim · ${swapNotu}`;
-    cizgiGrafik(document.getElementById("g-rezerv"), fark, REZERV, 1, "Rezervlerde dönem başına göre değişim",
-                tahNot, { isaretli: true });
+      `milyar ABD doları · haftalık değişim · ${tarihFmt(veri[0].date)} – ${tarihFmt(son.date)} toplamı: ${toplam} · ${swapNotu}`;
+    grupluGrafik(document.getElementById("g-rezerv"), fark, REZERV, 1, "Rezervlerde haftalık değişim",
+                 d => d.tah ? "Swap değişimi tahmini değere dayanıyor" : "Swap haftalık veri");
   } else {
     document.getElementById("aciklama-rezerv").textContent = `milyar ABD doları · ${swapNotu}`;
     // Hafta seçimlerinde 1-2 milyar dolarlık hareket görünsün diye y ekseni veri aralığına göre ölçeklenir
