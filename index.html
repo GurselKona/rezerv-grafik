@@ -42,7 +42,7 @@ body { margin: 0; }
 h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
 .alt { color: var(--ink-2); margin: 0 0 20px; }
 .filtre { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
-.filtre + .filtre { margin-bottom: 16px; }
+.filtre.donem { margin-bottom: 16px; }
 .filtre button {
   font: inherit; color: var(--ink-2); background: var(--surface); cursor: pointer;
   border: 1px solid var(--ring); border-radius: 8px; padding: 5px 12px;
@@ -97,15 +97,10 @@ td.tahmini { color: var(--muted); }
   <h1>TCMB rezervleri ve yurt içi yerleşiklerin döviz talebi</h1>
   <p class="alt" id="altbaslik"></p>
 
-  <div class="filtre" role="group" aria-label="Dönem – hafta">
-    <button data-hafta="1">Son 1 hafta</button>
-    <button data-hafta="2">Son 2 hafta</button>
-    <button data-hafta="3">Son 3 hafta</button>
-    <button data-hafta="4">Son 4 hafta</button>
-  </div>
-  <div class="filtre" role="group" aria-label="Dönem – ay">
+  <div class="filtre donem" role="group" aria-label="Dönem">
+    <button data-hafta="4" aria-pressed="true">Son 4 hafta</button>
     <button data-ay="3">Son 3 ay</button>
-    <button data-ay="6" aria-pressed="true">Son 6 ay</button>
+    <button data-ay="6">Son 6 ay</button>
     <button data-ay="12">Son 1 yıl</button>
     <button data-ay="24">Son 2 yıl</button>
     <button data-ay="60">Son 5 yıl</button>
@@ -153,7 +148,7 @@ td.tahmini { color: var(--muted); }
     Kaynak: TCMB Uluslararası Rezervler ve Döviz Likiditesi, EVDS (Merkez Bankası Rezervleri, Stand By bilançosu 2A,
     Yabancı Para Mevduatta Haftalık Değişim ve Parite Etkisi). Yöntem: Mahfi Eğilmez, "Rezervleri Hesaplama Rehberi" (2025).
     Swap = II.2 + II.3; haftalık verisi olmayan haftalarda bir önceki ay sonunun aylık IRFCL değeri (tahmini).
-    Oluşturma: 08.11.2026 15:33 · tcmb_rezervler.py / rezerv_grafik.py
+    Oluşturma: 08.11.2026 15:47 · tcmb_rezervler.py / rezerv_grafik.py
   </p>
 
   <p class="dipnot cekince">
@@ -520,7 +515,7 @@ const HAFTALIK = [
   { ad: "Tüzel kişiler", renk: "--s-tuzel", deger: d => d.yz },
 ];
 
-let donem = { ay: 6 };      // varsayılan: son 6 ay
+let donem = { hafta: 4 };   // varsayılan: son 4 hafta
 let rezervGorunum = null;   // null: dönemden türet (hafta -> değişim), aksi halde kullanıcı seçimi
 // Hafta seçiminde N haftalık değişimi göstermek için N+1 gözlem alınır (başlangıç seviyesi dahil)
 function donemVerisi() {
